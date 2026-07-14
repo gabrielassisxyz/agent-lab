@@ -1,0 +1,253 @@
+---
+status: active
+last_reviewed: 2026-07-14
+---
+
+# Design — what this repo measures, and why it is built this way
+
+> Decision record for the benchmark. Written before any code, from the session that turned
+> `gemini-conversation.md` (the spark, two months old) into a concrete instrument.
+>
+> **Read this before touching `evals/`.** Most of what is below is *why a thing was rejected*,
+> and rejections are the part nobody can reconstruct from the code.
+
+---
+
+## 1. What this is, and what it is not
+
+**This is a curiosity project.** It is not tied to a deadline or a deliverable, and no goal in
+`llm-workflow/about-me/telos.md` is allowed to steer its scope. It exists because the questions
+below are genuinely interesting and the answers do not exist anywhere yet. If it later produces
+something publishable, good — but that is a side effect, and designing for it would corrupt the
+design.
+
+**The objective, in order:**
+
+1. **Run existing benchmarks end to end, to understand how they actually work.** The artifact of
+   this step is *comprehension*, not a score: open a trajectory, watch the agent work, watch the
+   scorer decide pass/fail.
+2. **Build our own tasks**, once (1) has taught us what a task really is.
+3. **Later: build an agent** (~300 lines in a loop, in ghuntley's framing), and use (1) and (2)
+   as its test bench.
+
+**The questions that motivate it** — the whole point is that these have *no published answers*
+for this specific setup:
+
+- **Does the `llm-workflow` scaffolding do anything?** Skills on/off, `AGENTS.md` on/off.
+- **Does multi-agent orchestration beat a single agent?** (kernl's orchestrator is the concrete
+  shape in mind.)
+- **Which agent harness is actually better** — mini-swe-agent, Claude Code, Codex, `pi`,
+  OpenCode — *for the way Gabriel works*.
+- **Greenfield vs brownfield**, because the answer is probably not the same.
+
+---
+
+## 2. The spark, and the concept it has a name for
+
+The origin is `gemini-conversation.md` in this repo's root — a conversation from ~May 2026. It
+starts as "why is the SWE-bench leaderboard stale" and turns, at the point where Gabriel asks
+whether open-weight models' downsides can be mitigated *by optimizing the harness's own prompt
+and the environment it works in*.
+
+That idea has a name in the literature: **agent scaffolding** / **harness engineering**. The
+claim that made it interesting — *the same model can vary up to 6x in performance purely by
+changing the harness around it* — **is not verified.** It came from an LLM answer, and the
+citation behind it has not been checked. **Do not put that number in anything public until
+someone reads the source.** It is a hypothesis, and this repo is one attempt to test a small
+corner of it.
+
+The four arXiv links from that conversation **were confirmed by Gabriel to exist**:
+`2407.16741` (OpenHands), `2604.03515` (Inside the Scaffold), `2602.05892` (ContextBench),
+`2601.21064` (Textual Equilibrium Propagation).
+
+---
+
+## 3. The benchmark choice: SWE-rebench
+
+**Chosen: [SWE-rebench](https://swe-rebench.com/)** (`nebius/SWE-rebench-leaderboard`), scored by
+[the SWE-bench fork](https://github.com/SWE-rebench/SWE-bench-fork).
+
+### Why — and the argument is entirely about contamination
+
+Contamination is not an academic footnote here. **It destroys the exact effect this repo is
+trying to measure**, and it does so in the most dangerous way possible: by producing a *null
+result that looks credible*.
+
+The mechanism: if a task is in the model's training data, the model **recalls the gold patch**.
+It then succeeds *with* the scaffold and *without* it — memorisation does the work the
+scaffolding would have done. The measured delta collapses toward zero, and the conclusion
+"my `AGENTS.md` makes no difference" is reached for a reason that has nothing to do with
+`AGENTS.md`.
+
+The inverse is the same coin: **scaffolding matters most on tasks the model has never seen**,
+because that is when the agent has to navigate, search, and recover from its own errors. So the
+effect under study is *largest* precisely where SWE-rebench operates.
+
+### What SWE-rebench gives that the others do not
+
+- **Continuously mined, decontaminated tasks.** An automated pipeline pulls *fresh* GitHub
+  issues; 21,000+ issue–PR pairs from 3,400+ Python repos. The others are static snapshots that
+  rot with every model release.
+- **A free control group.** Their leaderboard is produced under a **fixed scaffolding** — a
+  minimal ReAct agent, identical prompts, default hyperparameters, 128K context — run **five
+  times per model**, reporting **SEM and pass@5**. The "no scaffolding" baseline this repo needs
+  has therefore *already been measured by someone else, with error bars*.
+- **Agent-agnostic scoring — verified.** The harness takes a `predictions.jsonl` of
+  `{instance_id, model_name_or_path, model_patch}` and evaluates the diff in Docker. Anything
+  that emits a patch can be scored: Claude Code, Codex, OpenCode, `pi`, mini-swe-agent, kernl's
+  orchestrator. **This is the property the entire experiment matrix depends on**, and it is why
+  the check for it was done before committing to the benchmark.
+- **7,500 pre-built Docker images** on Docker Hub — no environment construction.
+
+### Rejected, and why
+
+- **LiveCodeBench, Aider Polyglot** — *no agent*. LeetCode-shaped, one-shot, no repo, no tools,
+  no terminal. There is nowhere to attach a skill, a scaffold or an orchestrator: **no surface
+  for the independent variable**. They measure the bare model, which is the one axis this repo
+  does not care about. (LiveCodeBench was initially recommended for being cheap to run. Cheap is
+  worthless when it measures the wrong thing.)
+- **Akita's `llm-coding-benchmark`** — a good reference and a good read, but **greenfield-only**
+  (one fixed Rails brief, 18 models) and **one-shot prompting**, which is not how Gabriel works.
+  Its real lesson is kept, though, and it is a big one: *"benchmark metrics lie about runtime
+  correctness."* His scoring is **hybrid** — automated artifact checks plus a hand-written 0–100
+  rubric across 8 dimensions, with a human reading the generated code. He caught models
+  hallucinating the `RubyLLM` API, which no automated check would have flagged.
+- **SWE-PolyBench** (Amazon) — Java/JS/TS/Python, 2110 instances, 21 repos. **Static, therefore
+  contaminating.** But **its metrics are stolen wholesale** — see §4.
+- **Multi-SWE-bench** — the widest language coverage (Java, TS, JS, **Go**, Rust, C, C++; 1632
+  instances). **This is the plan B**, and the one to switch to if the Python-only constraint ever
+  becomes the binding one. It loses on the two axes that decide *this* experiment: contamination
+  and metric resolution.
+- **Terminal-Bench 2.0 / Harbor** — a strong fit structurally (Harbor's whole design is a
+  pluggable agent abstraction over containerised tasks) and worth revisiting for the
+  *terminal/infra* flavour of the question. Not chosen now because it does not give the
+  decontamination or the published fixed-scaffold baseline.
+
+### The price, stated plainly
+
+**SWE-rebench is Python-only.** Gabriel's first instinct was **Go**, to learn it. That was set
+aside on one principle: **the benchmark is the instrument, not the curriculum.** Go can be
+learned anywhere (there is a whole `learn-a-language` skill designed and unbuilt in
+`llm-workflow/plans/m3-specialized-skills.md`); a contaminated benchmark cannot be
+decontaminated. Python also happens to be the language Gabriel reads most easily, which helps
+when the job is to open a failed trajectory and understand *why* it failed — but that was a
+consequence of the choice, not a reason for it.
+
+---
+
+## 4. The instrument — assembled from the best part of each
+
+| Piece | Taken from | What it is |
+|---|---|---|
+| **Dataset** | SWE-rebench | `nebius/SWE-rebench-leaderboard`. Fresh, decontaminated, Python. |
+| **Scorer** | SWE-rebench's SWE-bench fork | `run_evaluation --predictions_path predictions.jsonl`. Docker, pre-built images, patch in / verdict out. |
+| **Protocol** | SWE-rebench | Fixed scaffold, identical prompts, **5 runs per configuration**, report **SEM + pass@5**. Their published ReAct line is the control group. |
+| **Metrics** | SWE-PolyBench | **File-retrieval** and **node-retrieval** recall/precision, computed by us from *predicted patch vs gold patch*. Plus their complexity classes. |
+| **Task selection** | "Efficient Benchmarking of AI Agents" | The **mid-range filter**: keep only tasks with a historical pass rate of ~30–70%. Cuts 44–70% of runs at near-identical ranking fidelity. |
+| **Sandbox discipline** | The neuralnoise WIP's failure | See §6. The sandbox is part of the instrument. |
+
+**Why the PolyBench metrics matter more than they look.** The hypothesis — "the scaffolding
+helps" — predicts an improvement in **navigation before it predicts one in resolution**. If
+`AGENTS.md` works, the first thing it changes is that the agent *finds the right file sooner*.
+File-retrieval recall is a **graded** signal; pass/fail is **one bit**. Measuring only resolve
+rate means looking where the signal is weakest. And these metrics are **portable** — they are
+computed from two diffs, so they need no cooperation from the benchmark that invented them.
+
+---
+
+## 5. Prior art: the neuralnoise WIP, and the two holes that are our contribution
+
+[*Benchmarking Local LLMs Against Coding Agent Harnesses*](https://www.neuralnoise.com/2026/harness-bench-wip/)
+is the closest existing work, and it compares almost exactly the harnesses on Gabriel's list:
+**Aider, Claude Code, OpenCode, Pi, Qwen CLI** — 17 model quantizations × 5 harnesses × 16 tasks
+= 1,360 runs, on a single M3 Max via `llama.cpp`. Findings: Pi leads at 76.9%; Q4 is not
+meaningfully degraded vs Q8.
+
+It has two holes, and they are the reason this repo has something to say:
+
+1. **Every cell ran exactly once.** No repeats, therefore **no noise floor** — the author says as
+   much, that the findings *"probably deserve a careful re-run before I'd trust the rankings to
+   two decimal places."* A ranking published without knowing its own variance.
+2. **One harness cheated.** OpenCode **read or executed the hidden test files in 14 instances**,
+   inflating its score. He measured cheating and reported it as capability.
+
+And it tests **none** of Gabriel's variables — no skills, no scaffold, no orchestration — and it
+is local-models-only on hardware he does not have.
+
+---
+
+## 6. The three traps, all of which will bite if ignored
+
+### Trap 1 — variance. Agentic runs are noisy.
+
+Same model, same task, same prompt, different outcome: the agent loops or it doesn't; it finds
+the file on the 2nd try or the 10th. **SWE-rebench runs every model 5× and publishes SEM for
+this exact reason.**
+
+This is fatal for the questions here, because they are all about **small deltas**. "With skills
+vs without" might be 5 percentage points. **If the run-to-run noise is 15 points, the experiment
+measures noise and calls it a result** — and it will be believed, because it arrives as a number.
+
+**Hence the first experiment is the noise floor, before anything else** (§7).
+
+### Trap 2 — statistical power. Repetition is not how you get it.
+
+Pass/fail on one task across 5 runs is **five coin flips**. The confidence interval swallows any
+effect worth finding. Repetition tells you the *noise*; it does not buy *signal*.
+
+**The signal comes from pairing:** run **20–30 instances once each, per configuration**, and
+compare configurations **on the same instances** (a paired / McNemar-style comparison). That is
+where the cheap statistical power is. Repeats exist only to establish how many of them each cell
+needs — not to be the design.
+
+### Trap 3 — the sandbox is part of the instrument.
+
+SWE-bench's structure already protects against the neuralnoise failure: the `test_patch` is
+applied by the *scorer*, not present in the agent's workspace. **But two leaks remain open by
+default, and neither leaves an obvious trace in the diff:**
+
+- **The git history.** The container holds a real public repo. `git log --all`, a future ref, a
+  `git show` — and the agent can simply *read the commit that fixes the issue*.
+- **The network.** With `bash` and an outbound route, the agent can search for the issue and find
+  the original PR.
+
+An agent that "resolves" a task this way is not well-scaffolded, it is **cheating** — and it
+would show up as a scaffolding win. **Close both before run 1:** no network in the agent
+container; prune remotes and future refs from the checkout.
+
+---
+
+## 7. The first experiment — the noise floor
+
+Deliberately not about skills, not about agents. Its only job is to produce **one number** that
+decides whether the rest of the matrix is viable at all.
+
+1. Clone the SWE-bench fork, install, verify Docker.
+2. **Prove the scorer before any agent exists**: run `--predictions_path gold` on one instance.
+   The gold patch must resolve. If it does not, nothing downstream means anything.
+3. Pick **one mid-range instance**.
+4. Run **one agent** (`claude -p`), **neutral scaffold**, **10 times** (not 5 — 5 is too few even
+   to *estimate* noise), with the sandbox of §6 closed.
+5. Record per run: **resolved (bool) · turns · tokens · wall time · files touched · did it run
+   the tests · file/node-retrieval recall**.
+6. Read the **dispersion**. That number sizes every experiment that follows.
+
+**Also the payoff for objective (1):** step 4 produces ten trajectories of the *same* task, to be
+read side by side — the agent solving it five different ways, and the scorer deciding.
+
+---
+
+## 8. Open, unverified, and honest
+
+- **Per-task difficulty metadata is not confirmed to exist.** The dataset card shows the SWE-bench
+  schema plus `install_config` / `requirements` / `environment` / `meta` — **no pass-rate field**.
+  Per-task rates are probably *derivable* from the leaderboard dataset (they run each model 5× on
+  the full set), but this has **not been checked**. If it fails, the mid-range filter becomes our
+  own work: run a cheap model over N tasks once and estimate difficulty from that. It changes the
+  cost of task selection, not the choice of benchmark.
+- **The "6x from the harness" claim is unverified** (§2).
+- **Cost is expected to be ~zero and this should be confirmed early.** The plan drives the CLI
+  agents Gabriel already pays for by subscription (`claude -p`, `opencode run`, `codex exec`)
+  rather than calling an API in a loop; Docker and the scorer are local. The `litellm` proxy on
+  the desktop (`:4000`) is up and reachable but needs a key — relevant only if raw-model runs are
+  ever wanted.
