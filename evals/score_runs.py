@@ -8,34 +8,29 @@ not stable, and a scaffold whose effect is smaller than that swing cannot be mea
 run per cell.
 
 File- and node-retrieval are the PolyBench metrics, computed here from the predicted patch
-against the gold patch. They are the sharpest instrument we have for the scaffolding question,
-because a scaffold should improve *navigation* (does the agent find the right file?) before it
-improves *resolution* — and navigation is graded, while pass/fail is binary.
+against the gold patch. Node retrieval comes from `nodes.py`, which reads the AST — an earlier
+version read the label in the hunk header and was structurally incapable of scoring anything but
+zero. See design.md §10b.
+
+**Retrieval *precision* is not a quality signal, and must not be read as one.** It measures
+conformity to the gold patch, which is one human's fix, not the set of correct fixes. On
+`pgmpy__pgmpy-3137` the repo carries two parallel implementations of the same logic and the agent
+repairs both, where the gold patch repairs one: precision is 0.5 on every run, and the agent is
+arguably the more thorough of the two. Recall is the signal; precision is a note.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import statistics
 import subprocess
 from pathlib import Path
 
+from nodes import base_files, files_in, nodes_in
+
 REPO = Path(__file__).resolve().parent.parent
 FORK = Path.home() / "repositories" / "_cloned" / "SWE-bench-fork"
-
-FILE_RE = re.compile(r"^diff --git a/(\S+) b/\S+", re.M)
-# A hunk header carries the enclosing function/class in its trailing context, e.g.
-# `@@ -12,7 +12,9 @@ def estimate(self):` — that is what "node" means here.
-NODE_RE = re.compile(r"^@@ .* @@\s*(?:def|class)\s+(\w+)", re.M)
-
-
-def files_in(patch: str) -> set[str]:
-    return set(FILE_RE.findall(patch))
-
-
-def nodes_in(patch: str) -> set[str]:
-    return set(NODE_RE.findall(patch))
+BASE_CACHE = REPO / ".cache" / "base-files"
 
 
 def prf(pred: set, gold: set) -> tuple[float, float]:
@@ -74,17 +69,27 @@ def main() -> None:
     from datasets import load_dataset
     inst = next(r for r in load_dataset(args.dataset, split=args.split)
                 if r["instance_id"] == args.instance)
-    gold_files, gold_nodes = files_in(inst["patch"]), nodes_in(inst["patch"])
 
     outdir = REPO / "results" / "noise-floor" / args.instance / args.model
+    runs = {int(p.stem.split("-")[1]): json.loads(p.read_text())
+            for p in sorted(outdir.glob("run-*.json"))}
+
+    # Node retrieval needs the files as they were *before* the patch, and the prebuilt eval image
+    # is the authority on that: it is the exact tree the agent worked on, it is local, and it
+    # cannot drift from what was actually run. Every file any patch touches is lifted once.
+    touched = files_in(inst["patch"]) | {f for r in runs.values()
+                                         for f in files_in(r.get("patch", ""))}
+    base = base_files(inst["image_name"], touched, BASE_CACHE)
+    gold_files, gold_nodes = files_in(inst["patch"]), nodes_in(inst["patch"], base)
+
     rows = []
     for pred in sorted(outdir.glob("preds-*.jsonl")):
         n = int(pred.stem.split("-")[1])
-        run = json.loads((outdir / f"run-{n:02d}.json").read_text())
+        run = runs[n]
         resolved = score(pred, args.instance, args.dataset, args.split,
                          f"nf-{args.model}-{n:02d}")
         fr, fp = prf(files_in(run["patch"]), gold_files)
-        nr, npz = prf(nodes_in(run["patch"]), gold_nodes)
+        nr, np_ = prf(nodes_in(run["patch"], base), gold_nodes)
         # A timed-out run has no turns and no patch. It is kept in the table and excluded from
         # the spreads: it is a fact about the environment (an upstream backoff ate the run),
         # not a fact about how the agent solves the task. Folding it into the medians would
@@ -93,7 +98,8 @@ def main() -> None:
                      "turns": run.get("turns"),
                      "tools": run.get("tool_calls"), "wall_s": run.get("wall_time_s"),
                      "patch_lines": len(run["patch"].splitlines()),
-                     "file_recall": fr, "file_prec": fp, "node_recall": nr,
+                     "file_recall": fr, "file_prec": fp,
+                     "node_recall": nr, "node_prec": np_,
                      "tokens_out": run.get("tokens_out")})
         if rows[-1]["timeout"]:
             print(f"  run {n:02d}  TIMEOUT (upstream backoff) — excluded from spreads",
@@ -101,7 +107,7 @@ def main() -> None:
         else:
             print(f"  run {n:02d}  resolved={str(resolved):<5} turns={rows[-1]['turns']:>3} "
                   f"wall={rows[-1]['wall_s']:>6}s  patch={rows[-1]['patch_lines']:>3}L  "
-                  f"file_recall={fr} prec={fp}", flush=True)
+                  f"file_recall={fr} node_recall={nr} (prec {fp}/{np_})", flush=True)
 
     (outdir / "summary.json").write_text(json.dumps(rows, indent=2))
 
@@ -123,8 +129,13 @@ def main() -> None:
     print(f"  turns         : {spread('turns')}")
     print(f"  patch lines   : {spread('patch_lines')}")
     print(f"  file recall   : {spread('file_recall')}")
+    print(f"  node recall   : {spread('node_recall')}")
     print(f"  wall seconds  : {spread('wall_s')}   <-- NOT a clean signal: it includes time "
           f"spent waiting on upstream rate limits, so it measures the queue as much as the agent")
+    print(f"  retrieval prec: file={spread('file_prec')}")
+    print(f"                  node={spread('node_prec')}")
+    print("                  ^ conformity to the gold patch, NOT correctness — see the module "
+          "docstring. Recall is the signal.")
     print("\nResolve rate is one bit per run. The spreads are the noise floor: any effect you "
           "intend to measure downstream must be larger than these, or you are measuring noise.")
 

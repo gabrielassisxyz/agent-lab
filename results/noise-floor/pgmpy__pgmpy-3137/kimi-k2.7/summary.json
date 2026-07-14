@@ -9,7 +9,8 @@
     "patch_lines": 120,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 28910
   },
   {
@@ -22,7 +23,8 @@
     "patch_lines": 134,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 35344
   },
   {
@@ -35,7 +37,8 @@
     "patch_lines": 136,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 14772
   },
   {
@@ -49,6 +52,7 @@
     "file_recall": 0.0,
     "file_prec": 0.0,
     "node_recall": 0.0,
+    "node_prec": 0.0,
     "tokens_out": null
   },
   {
@@ -61,7 +65,8 @@
     "patch_lines": 137,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 44060
   },
   {
@@ -74,7 +79,8 @@
     "patch_lines": 148,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 28754
   },
   {
@@ -87,7 +93,8 @@
     "patch_lines": 146,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 50540
   },
   {
@@ -100,7 +107,8 @@
     "patch_lines": 126,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 20926
   },
   {
@@ -114,6 +122,7 @@
     "file_recall": 0.0,
     "file_prec": 0.0,
     "node_recall": 0.0,
+    "node_prec": 0.0,
     "tokens_out": null
   },
   {
@@ -126,7 +135,8 @@
     "patch_lines": 153,
     "file_recall": 1.0,
     "file_prec": 0.5,
-    "node_recall": 0.0,
+    "node_recall": 1.0,
+    "node_prec": 0.5,
     "tokens_out": 24458
   }
 ]

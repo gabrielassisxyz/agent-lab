@@ -8,3 +8,6 @@ __pycache__/
 # a personal SSH keypair got dropped here by accident — never commit it
 windows-bibi
 windows-bibi.pub
+
+# base files lifted out of the eval image for node scoring — reproducible, not source
+.cache/

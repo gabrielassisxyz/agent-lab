@@ -341,12 +341,9 @@ Release dates are public, dated, and not self-reported. The rule, in order:
 | **turns** | 30 → 106 · median 59 · **sd 28 · 3.5x** |
 | **patch lines** | 120 → 153 · 1.3x |
 | **file-retrieval recall** | **1.0 on every run. sd = 0.** |
-| file-retrieval precision | **0.5 on every run** — the agent always touches one file gold does not |
-| node-retrieval recall | `0.0` on every run — **the metric is broken, not saturated. See §10b.** |
+| **node-retrieval recall** | **1.0 on every run. sd = 0.** *(first reported as `0.0` — the metric was broken; see §10b)* |
+| retrieval precision (file / node) | **0.5 / 0.5 on every run** — the agent fixes a second, duplicated implementation the gold patch ignores. **Not a quality signal — see §10b.** |
 | timed out on upstream backoff | 2 of 10 |
-
-> **Read §10b before trusting the conclusions below.** The two rows above were omitted from this
-> table when it was first written, and the second one invalidates part of what follows.
 
 ### The finding, and it inverts the plan
 
@@ -364,12 +361,13 @@ Three consequences, and they are load-bearing for everything downstream:
   selection is therefore not a cost optimisation — it is a precondition for the experiment
   meaning anything.** A task the model always wins (or always loses) carries zero information
   about the scaffold.
-- **The file-retrieval metric was wrong too, and it was my strongest argument.** §4 claimed it
+- **The retrieval metrics were wrong too, and they were my strongest argument.** §4 claimed they
   would be "the sharpest instrument", because a scaffold should improve navigation before it
-  improves resolution. It came back **1.0 with zero variance** — also at ceiling. A graded metric
-  is worth nothing if the agent is already perfect on it.
-- **Turns is the only metric with headroom, and it is expensive.** *(Stated too strongly — node
-  retrieval was never actually measured. See §10b.)* With sd=28 on a mean of 63
+  improves resolution. Both came back **1.0 with zero variance** — also at ceiling. A graded metric
+  is worth nothing if the agent is already perfect on it. (Node retrieval initially *appeared* to
+  be at the floor instead; that was a bug in the metric, corrected in §10b. The corrected value is
+  1.0, so this conclusion holds — but it was reached before the evidence for it existed.)
+- **Turns is the only metric with headroom, and it is expensive.** With sd=28 on a mean of 63
   (**44% relative sd**), the sample sizes are brutal: **~14 runs per arm** to detect a 30-turn
   (~47%) difference, **~31 per arm** for 20 turns, **~125 per arm** for 10 turns. A scaffold
   effect plausibly lives in the 10–20 turn range. **One run per cell would have measured
@@ -400,60 +398,85 @@ seen the answer.
 
 ---
 
-## 10b. The node-retrieval metric is broken, and §10 reported around it (2026-07-14)
+## 10b. The node-retrieval metric was broken. Fixed, it says 1.0 — and §10 survives (2026-07-14)
 
 **`node_recall` came back `0.0` on all ten runs — including the eight that resolved the task.**
-That is not a metric at its floor. It is a metric that **cannot return anything else**, and the
-§10 results table quietly omitted the column (along with `file_prec`) rather than explaining it.
+That was not a metric at its floor: it was a metric that **could not return anything else**. It
+has been rewritten to read the AST, and the true value is **`1.0` on every completed run, sd 0**.
 
-### Why it is structurally zero
+The correction changes the *evidence* under §10 without changing its *conclusion*. That is worth
+saying plainly, because the hypothesis that motivated the fix — "the broken metric is hiding
+headroom" — **was wrong**.
 
-`score_runs.py:30` defines a "node" as **the label git prints in the hunk header**:
+### Why it was structurally zero
+
+The old scorer defined a "node" as **the label git prints in the hunk header**:
 
 ```python
-NODE_RE = re.compile(r"^@@ .* @@\s*(?:def|class)\s+(\w+)", re.M)
+NODE_RE = re.compile(r"^@@ .* @@\s*(?:def|class)\s+(\w+)", re.M)   # removed
 ```
 
-That label is a **rendering artifact of the diff** — git's `xfuncname` heuristic showing the
-nearest preceding definition line — not an AST node. On `pgmpy__pgmpy-3137`:
+That label is a **rendering artifact of the diff**, not a property of the code. Git picks it with
+the `xfuncname` heuristic **of whatever diff driver is configured** — and the two sides of the
+comparison were produced by different ones:
 
-| | file | what git labelled the hunks |
+| | hunks at | git labelled them |
 |---|---|---|
-| **gold** | `pgmpy/causal_discovery/_base.py` | `def _build_skeleton`, `def _get_potential_sepsets` |
-| **predicted** | the same file, **plus** `pgmpy/estimators/BaseConstraintEstimator.py` | `class _ConstraintMixin`, `class BaseConstraintEstimator` |
+| **gold** (from the dataset's pipeline, Python driver: matches indented `def`) | lines 353, 421 | `def _build_skeleton`, `def _get_potential_sepsets` |
+| **predicted** (the agent's `git diff`, default driver: only matches column 0) | lines **353, 421** | `class _ConstraintMixin` |
 
-Both patches edit **the same file** — hence `file_recall = 1.0`. But git labelled gold's hunks
-with the enclosing **`def`** and the prediction's with the enclosing **`class`**. The two label
-sets are disjoint **by construction**, so the intersection is empty and `node_recall` is `0.0`
-*no matter which functions the agent actually got right*. The regex is fine; it matches cleanly
-on both sides. The **definition** is what is wrong, and the code comment admits the swap
-("*that is what "node" means here*") without noticing it destroyed the measurement.
+**Same file. Same lines. Different labels.** The sets are disjoint by construction, so the
+intersection is empty and `node_recall` is `0.0` *regardless of what the agent actually did*. The
+regex was never the bug — the **definition** was.
 
-SWE-PolyBench, where this metric was taken from (§4), extracts the genuinely-modified nodes with
-**tree-sitter**. That is the fix.
+### The fix, and what it measures
 
-### Why this matters more than a broken column
+`evals/nodes.py` does what SWE-PolyBench does: parse the file **at `base_commit`** and map every
+line a patch touches to the innermost enclosing `def`/`class`, qualified (`Class.method`). The
+base files are lifted out of **the prebuilt eval image** — the exact tree the agent worked on,
+local, and incapable of drifting from what was run.
 
-**§10 concluded "turns is the only metric with headroom", and the entire sample-size argument
-(~14 to ~125 runs per arm) rests on that.** That conclusion was reached with the one *graded,
-fine-grained* metric silently dead. §4 argued node retrieval would be the **sharpest
-instrument** — a scaffold should improve navigation before it improves resolution — and §10
-declared the argument dead on evidence that was never collected.
+Proven to discriminate before being trusted: gold vs. itself → `1.0/1.0`; a patch touching only
+the *other* file → `0.0`; an empty patch and a module-level edit → no nodes. It is not a
+`1.0`-machine.
 
-And there is a standing hint that real variance lives there: **`file_prec = 0.5` on every run.**
-The agent touches a second file the gold patch never touches, every single time. It finds the
-right file and is **not surgical**. Whether it lands on the right *functions* is exactly the
-question a working node metric answers, and right now the honest statement is **we do not know**.
+### The result: the ceiling was real
 
-**It may well come back saturated too.** But then that would be a measurement, not an artifact.
+| metric | old (hunk label) | **now (AST)** |
+|---|---|---|
+| `node_recall` | `0.0` — artifact | **`1.0` · sd 0.000** |
+| `node_prec` | not reported | **`0.5` · sd 0.000** |
 
-### The correction is free
+The gold patch touches exactly two nodes — `_ConstraintMixin._build_skeleton` and
+`_ConstraintMixin._get_potential_sepsets`. **The agent hits both, on all eight completed runs,
+without exception.**
 
-No inference, no API, no litellm: the ten predicted patches are on disk under
-`results/noise-floor/…/raw/run-NN/patch.diff`, the gold patch comes from the dataset, and the
-resolve verdicts are already in `summary.json`. **Re-scoring the metric costs nothing.** It
-should therefore happen *before* the K2.6 control — running the control with a known-broken
-instrument buys a number nobody can interpret.
+So node retrieval is **at ceiling, exactly like file retrieval and resolve rate**. §4 had called
+it the *sharpest instrument*; on this task it is as blunt as the rest. **§10's conclusion — turns
+is the only metric with headroom — stands, and the sample-size maths (~14 to ~125 runs per arm)
+is unchanged.** It was right for a reason it had not actually established; now it has.
+
+### The precision of 0.5 is not sloppiness — and it is a trap
+
+`file_prec` and `node_prec` sit at 0.5 because the agent always repairs a **second** location the
+gold patch ignores: `pgmpy/estimators/BaseConstraintEstimator.py`. That file is **not a
+deprecated shim** — it is a genuine parallel implementation of the same logic (its own
+`build_skeleton`, with joblib parallelism). The repo carries **two copies of the bug**; the agent
+fixes both; the human fixed one.
+
+**So retrieval precision penalises the agent for being more thorough than the reference — while
+it still passes the tests 8/8.** The lesson generalises past this instance and must not be
+forgotten when the matrix starts producing cells:
+
+> **Precision against a single gold patch measures conformity to one human's fix, not
+> correctness.** In any repo with duplicated logic it is noise. **Recall is the signal.**
+
+### It cost nothing, and that is the point
+
+No inference, no API, no proxy: the ten patches were on disk, the gold came from the dataset, the
+base files came from a local image, and the verdicts were already scored. **The whole correction
+was a re-read of data already collected** — which is the argument for keeping raw trajectories
+around at all.
 
 ---
 
