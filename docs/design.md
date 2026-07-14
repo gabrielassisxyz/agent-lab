@@ -283,7 +283,54 @@ Four things the setup taught, none of which are in anyone's README:
 
 ---
 
-## 9. Still open, and honest
+## 9. Decontamination in practice — use the release date, not the cutoff
+
+Choosing a post-cutoff split requires knowing each model's cutoff. **Half of them do not publish
+one** — and it is precisely the open-weight vendors Gabriel cares about who stay silent. Worse,
+asking the model is useless: the standard reference on this opens by saying *"never trust a
+model's self-reported cutoff"*, because models hallucinate their own boundary.
+
+**So do not depend on the cutoff. Depend on the bound.**
+
+> **A model's release date is a hard ceiling on its training cutoff.** Nothing can be trained on
+> data that did not exist when it shipped.
+
+Release dates are public, dated, and not self-reported. The rule, in order:
+
+1. **An official cutoff exists** → use it.
+2. **It does not** → use the release date as the ceiling. Conservative, and always true.
+
+### The table (researched 2026-07-14)
+
+| Model | Cutoff | Confidence |
+|---|---|---|
+| GPT-5.5 | **2025-12-01** | Official |
+| Claude Opus 4.8 | **2026-01** | Official |
+| Gemini 3.5 Flash | **2025-01** | Official (despite a 2026-05 release) |
+| MiniMax M3 | **2026-01** | Official (HF chat template) |
+| Kimi K2.6 | **2025-04** | Vendor, via reviews |
+| Gemini 3.1 Pro | 2025-01 *(inherited from Gemini 3 Pro)* | **Card does not state it**; a third party claims 2026-02. **Unresolved — do not use until settled.** |
+| DeepSeek V4 Pro / Flash | **2026-04** *(third party only)* | Official docs are silent. Released **2026-04-24**. |
+| Kimi K2.7-Code · GLM-5.1 · GLM-5.2 · MiniMax M2.7 · Gemma 4 | — | **Unpublished.** Use the release-date ceiling. |
+| MiniMax M2.5 | 2025-01 *(?)* | Secondary and **incoherent** — the same source dates M2 at 2025-09, which is *later*. Discard. |
+
+### Applied to the splits
+
+**Run on `2026_03`** — newest, and the largest (110 instances, vs 48 and 57).
+
+- **Clean:** GPT-5.5 · Opus 4.8 · Gemini 3.5 Flash · MiniMax M3 · Kimi K2.6, plus anything whose
+  *release* predates 2026-03.
+- **Structurally suspect:** **DeepSeek V4** (released 2026-04-24; the one cutoff claim that exists
+  says 2026-04, which would contaminate **all three** 2026 splits) and **Gemma 4** (released
+  2026-04-02). Both shipped *after* the March 2026 PRs and could have seen them.
+- **Worth doing on purpose:** run the suspect models anyway, as a **contamination control group**.
+  If they score suspiciously well on `2026_03` relative to their standing elsewhere, that is a
+  finding in itself — and it validates the whole decontamination premise empirically rather than
+  by appeal to a vendor's word.
+
+---
+
+## 10. Still open, and honest
 
 - **The "6x from the harness" claim is unverified** (§2). It is the premise of the whole repo.
 - **Empirical per-task pass rates** are still missing — see §8. Needed for the mid-range filter.
