@@ -330,7 +330,71 @@ Release dates are public, dated, and not self-reported. The rule, in order:
 
 ---
 
-## 10. Still open, and honest
+## 10. Result — the noise floor, measured (2026-07-14)
+
+**pi + Kimi K2.7-Code, `pgmpy__pgmpy-3137` (split `2026_03`), 10 runs, neutral scaffold**
+(`--no-skills --no-context-files`), sandboxed with no route to the internet.
+
+| metric | result |
+|---|---|
+| **resolve rate** | **8/8** of the completed runs |
+| **turns** | 30 → 106 · median 59 · **sd 28 · 3.5x** |
+| **patch lines** | 120 → 153 · 1.3x |
+| **file-retrieval recall** | **1.0 on every run. sd = 0.** |
+| timed out on upstream backoff | 2 of 10 |
+
+### The finding, and it inverts the plan
+
+**The noise floor of the *verdict* is zero. The noise floor of the *process* is 3.5x.**
+
+The agent solved the task every single time, found the right file every single time, and wrote
+a patch of near-identical size every time — while spending anywhere from 30 to 106 turns getting
+there. It always arrives; the route is chaotic.
+
+Three consequences, and they are load-bearing for everything downstream:
+
+- **Resolve rate is useless on this task — it is at ceiling.** You cannot measure a scaffold's
+  effect on a metric that is already saturated. This is the mid-range filter (30–70% historical
+  pass rate) from *Efficient Benchmarking of AI Agents*, rediscovered the hard way. **Task
+  selection is therefore not a cost optimisation — it is a precondition for the experiment
+  meaning anything.** A task the model always wins (or always loses) carries zero information
+  about the scaffold.
+- **The file-retrieval metric was wrong too, and it was my strongest argument.** §4 claimed it
+  would be "the sharpest instrument", because a scaffold should improve navigation before it
+  improves resolution. It came back **1.0 with zero variance** — also at ceiling. A graded metric
+  is worth nothing if the agent is already perfect on it.
+- **Turns is the only metric with headroom, and it is expensive.** With sd=28 on a mean of 63
+  (**44% relative sd**), the sample sizes are brutal: **~14 runs per arm** to detect a 30-turn
+  (~47%) difference, **~31 per arm** for 20 turns, **~125 per arm** for 10 turns. A scaffold
+  effect plausibly lives in the 10–20 turn range. **One run per cell would have measured
+  nothing** — which is precisely the question this experiment existed to answer, and now it has
+  a number instead of an intuition.
+
+**So the design holds and is now quantified:** do not fight the variance with repetition. **Pair
+across instances** — ~25 mid-range tasks, once each per configuration, compared on the same
+instances. That removes per-instance variance as a nuisance factor instead of trying to average
+it away.
+
+### Two operational facts
+
+- **`wall_time_s` is not a clean signal and must not be reported as one.** It includes time spent
+  waiting on upstream rate limits. Two of ten runs sat in client-side backoff for ~26 minutes and
+  died at the 40-minute timeout without finishing. The queue is being measured alongside the
+  agent. Turns, tool calls, patch size and the verdict are the signals that survive.
+- **A ~20% upstream-timeout rate is a property of this bench, not of the model**, and it is
+  recorded separately (`"timeout": true`) so it can never be confused with "the model failed".
+
+### The elephant
+
+**8/8, with perfect file recall, on a task created 2026-03-22 — by a model released 2026-06-12
+that publishes no cutoff.** That is what memorisation looks like. It is not proof. But it turns
+the **Kimi K2.6 control** (cutoff 2025-04, published) from a methodological nicety into the
+central question: if K2.6 also cruises to 8/8, the task is simply easy. If it struggles, K2.7 has
+seen the answer.
+
+---
+
+## 11. Still open, and honest
 
 - **The "6x from the harness" claim is unverified** (§2). It is the premise of the whole repo.
 - **Empirical per-task pass rates** are still missing — see §8. Needed for the mid-range filter.

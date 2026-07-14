@@ -22,13 +22,33 @@ on/off, scaffold on/off), every result downstream is noise wearing a number's cl
       Needs `HF_TOKEN` — see design §8, the failure is misleading.
 - [ ] **Close the sandbox leaks** (design §6): **no network** in the agent container, **prune
       future git refs and remotes** from the checkout. Must happen *before* the first agent run.
-- [ ] Pick one instance from `2026_02` / `2026_03` (post-cutoff). Run `claude -p` with a neutral
-      scaffold **10×**.
-- [ ] Record per run: resolved · turns · tokens · wall time · files touched · tests run ·
-      file/node-retrieval recall.
-- [ ] Read the dispersion. **That number sizes everything else.**
+- [x] Run one instance **10×** with a neutral scaffold. Done with **pi + Kimi K2.7** on
+      `pgmpy__pgmpy-3137` (`2026_03`).
+- [x] **Read the dispersion.** → design §10. **Verdict variance is zero (8/8); process variance
+      is 3.5x (30–106 turns).**
 
-## Next — one variable at a time
+### What the number changed
+
+- **Resolve rate and file recall are both at ceiling on this task, so neither can measure a
+  scaffold.** Task selection is now a *precondition*, not a cost optimisation.
+- **Turns is the only metric with headroom**, at ~44% relative sd → **~14 runs per arm** to see a
+  47% effect, **~31** for a 32% effect. One run per cell measures nothing.
+- **`wall_time_s` is contaminated** by upstream rate-limit backoff (2 of 10 runs died in it) and
+  must not be reported as a signal.
+
+## Next — the control, and it is now the main question
+
+**Run Kimi K2.6 (published cutoff 2025-04) on the same instance, same everything.** K2.7-Code
+shipped 2026-06-12 with no published cutoff and went 8/8 with perfect file recall on a task
+created 2026-03-22. If K2.6 also cruises, the task is easy. **If it struggles, K2.7 saw the
+answer** — and that is a result about the benchmark's decontamination premise, not about Kimi.
+
+- [x] LiteLLM config: `kimi-k2.6` added; `glm-5.1`/`glm-5.2` were missing
+      `OLLAMA_CLOUD_API_KEY_03` and were silently running on 2/3 of the intended throughput.
+- [ ] Restart LiteLLM to apply (a machine change → `ops/omarchy-log.md` in the same session).
+- [ ] Run the K2.6 control 10×.
+
+## Then — one variable at a time
 
 The full curiosity list is combinatorial (5 agents × skills × scaffold × orchestration ×
 greenfield/brownfield ≈ 80 cells before repeats) and will not close. One variable at a time,

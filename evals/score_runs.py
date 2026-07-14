@@ -85,33 +85,48 @@ def main() -> None:
                          f"nf-{args.model}-{n:02d}")
         fr, fp = prf(files_in(run["patch"]), gold_files)
         nr, npz = prf(nodes_in(run["patch"]), gold_nodes)
-        rows.append({"run": n, "resolved": resolved, "turns": run.get("turns"),
+        # A timed-out run has no turns and no patch. It is kept in the table and excluded from
+        # the spreads: it is a fact about the environment (an upstream backoff ate the run),
+        # not a fact about how the agent solves the task. Folding it into the medians would
+        # blame the model for the plumbing.
+        rows.append({"run": n, "resolved": resolved, "timeout": bool(run.get("timeout")),
+                     "turns": run.get("turns"),
                      "tools": run.get("tool_calls"), "wall_s": run.get("wall_time_s"),
                      "patch_lines": len(run["patch"].splitlines()),
                      "file_recall": fr, "file_prec": fp, "node_recall": nr,
                      "tokens_out": run.get("tokens_out")})
-        print(f"  run {n:02d}  resolved={str(resolved):<5} turns={rows[-1]['turns']:>3} "
-              f"wall={rows[-1]['wall_s']:>6}s  patch={rows[-1]['patch_lines']:>3}L  "
-              f"file_recall={fr} prec={fp}", flush=True)
+        if rows[-1]["timeout"]:
+            print(f"  run {n:02d}  TIMEOUT (upstream backoff) — excluded from spreads",
+                  flush=True)
+        else:
+            print(f"  run {n:02d}  resolved={str(resolved):<5} turns={rows[-1]['turns']:>3} "
+                  f"wall={rows[-1]['wall_s']:>6}s  patch={rows[-1]['patch_lines']:>3}L  "
+                  f"file_recall={fr} prec={fp}", flush=True)
 
     (outdir / "summary.json").write_text(json.dumps(rows, indent=2))
 
+    ok = [r for r in rows if not r["timeout"]]
+
     def spread(key: str) -> str:
-        vals = [r[key] for r in rows if isinstance(r.get(key), (int, float))]
+        vals = [r[key] for r in ok if isinstance(r.get(key), (int, float))]
         if len(vals) < 2:
             return "n/a"
+        ratio = max(vals) / min(vals) if min(vals) else float("inf")
         return (f"min={min(vals)} max={max(vals)} median={statistics.median(vals)} "
-                f"sd={statistics.stdev(vals):.1f}")
+                f"sd={statistics.stdev(vals):.1f}  ({ratio:.1f}x)")
 
-    n_res = sum(r["resolved"] for r in rows)
-    print(f"\n=== {args.model} on {args.instance} ({len(rows)} runs) ===")
-    print(f"  resolve rate : {n_res}/{len(rows)}")
-    print(f"  turns        : {spread('turns')}")
-    print(f"  wall seconds : {spread('wall_s')}")
-    print(f"  patch lines  : {spread('patch_lines')}")
-    print(f"  file recall  : {spread('file_recall')}")
-    print("\nThe resolve rate is one bit per run. The spreads are the noise floor: any effect "
-          "you intend to measure downstream has to be larger than these.")
+    n_res = sum(r["resolved"] for r in ok)
+    n_to = len(rows) - len(ok)
+    print(f"\n=== {args.model} on {args.instance} ===")
+    print(f"  runs          : {len(rows)} ({len(ok)} completed, {n_to} timed out upstream)")
+    print(f"  resolve rate  : {n_res}/{len(ok)} of the completed runs")
+    print(f"  turns         : {spread('turns')}")
+    print(f"  patch lines   : {spread('patch_lines')}")
+    print(f"  file recall   : {spread('file_recall')}")
+    print(f"  wall seconds  : {spread('wall_s')}   <-- NOT a clean signal: it includes time "
+          f"spent waiting on upstream rate limits, so it measures the queue as much as the agent")
+    print("\nResolve rate is one bit per run. The spreads are the noise floor: any effect you "
+          "intend to measure downstream must be larger than these, or you are measuring noise.")
 
 
 if __name__ == "__main__":
