@@ -4,3 +4,7 @@ target/
 __pycache__/
 *.pyc
 .env
+
+# a personal SSH keypair got dropped here by accident — never commit it
+windows-bibi
+windows-bibi.pub
