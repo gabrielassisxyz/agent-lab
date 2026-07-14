@@ -16,16 +16,17 @@ The whole matrix is blocked on one number: **how much does the same task, same a
 config vary between runs?** If run-to-run noise is larger than the effects being hunted (skills
 on/off, scaffold on/off), every result downstream is noise wearing a number's clothes.
 
-1. Clone [`SWE-rebench/SWE-bench-fork`](https://github.com/SWE-rebench/SWE-bench-fork), install,
-   verify Docker.
-2. **Prove the scorer first**: `run_evaluation --predictions_path gold` on one instance. The gold
-   patch must resolve, or nothing downstream means anything.
-3. Close the sandbox leaks (§6): **no network** in the agent container, **prune future git refs
-   and remotes** from the checkout.
-4. Pick one mid-range instance. Run `claude -p` with a neutral scaffold **10×**.
-5. Record per run: resolved · turns · tokens · wall time · files touched · tests run ·
-   file/node-retrieval recall.
-6. Read the dispersion. **That number sizes everything else.**
+- [x] Clone [`SWE-rebench/SWE-bench-fork`](https://github.com/SWE-rebench/SWE-bench-fork), install,
+      verify Docker. → `~/repositories/_cloned/SWE-bench-fork`, `swebench 4.0.3`.
+- [x] **Prove the scorer**: gold patch on `pgmpy__pgmpy-3137` (`2026_03`) → **resolved**, ~5 min.
+      Needs `HF_TOKEN` — see design §8, the failure is misleading.
+- [ ] **Close the sandbox leaks** (design §6): **no network** in the agent container, **prune
+      future git refs and remotes** from the checkout. Must happen *before* the first agent run.
+- [ ] Pick one instance from `2026_02` / `2026_03` (post-cutoff). Run `claude -p` with a neutral
+      scaffold **10×**.
+- [ ] Record per run: resolved · turns · tokens · wall time · files touched · tests run ·
+      file/node-retrieval recall.
+- [ ] Read the dispersion. **That number sizes everything else.**
 
 ## Next — one variable at a time
 

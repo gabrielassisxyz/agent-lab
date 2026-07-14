@@ -237,17 +237,59 @@ read side by side — the agent solving it five different ways, and the scorer d
 
 ---
 
-## 8. Open, unverified, and honest
+## 8. Setup — what actually happened, verified 2026-07-14
 
-- **Per-task difficulty metadata is not confirmed to exist.** The dataset card shows the SWE-bench
-  schema plus `install_config` / `requirements` / `environment` / `meta` — **no pass-rate field**.
-  Per-task rates are probably *derivable* from the leaderboard dataset (they run each model 5× on
-  the full set), but this has **not been checked**. If it fails, the mid-range filter becomes our
-  own work: run a cheap model over N tasks once and estimate difficulty from that. It changes the
-  cost of task selection, not the choice of benchmark.
-- **The "6x from the harness" claim is unverified** (§2).
-- **Cost is expected to be ~zero and this should be confirmed early.** The plan drives the CLI
-  agents Gabriel already pays for by subscription (`claude -p`, `opencode run`, `codex exec`)
-  rather than calling an API in a loop; Docker and the scorer are local. The `litellm` proxy on
-  the desktop (`:4000`) is up and reachable but needs a key — relevant only if raw-model runs are
-  ever wanted.
+**The scorer is proven.** Gold patch on `pgmpy__pgmpy-3137` (split `2026_03`) →
+`Instances resolved: 1`, ~5 minutes, using a pre-built image. The harness is installed at
+`~/repositories/_cloned/SWE-bench-fork` (`swebench 4.0.3`, venv via `uv`).
+
+```bash
+HF_TOKEN=... .venv/bin/python -m swebench.harness.run_evaluation \
+  --dataset_name nebius/SWE-rebench-leaderboard --split 2026_03 \
+  --predictions_path gold --instance_ids pgmpy__pgmpy-3137 \
+  --cache_level instance --run_id validate-gold --namespace swerebench
+```
+
+Four things the setup taught, none of which are in anyone's README:
+
+- **An `HF_TOKEN` is mandatory** — and the failure is deeply misleading. `nebius/SWE-rebench-leaderboard`'s
+  large files sit in HuggingFace's **Xet** storage, which **401s for anonymous requests on this
+  repo specifically** (`princeton-nlp/SWE-bench_Verified` and `nebius/SWE-rebench` both download
+  fine without one). It is not a network, machine, or library problem, and it presents as one.
+  Any free read-scoped token fixes it.
+- **The fresh tasks exist ONLY in the leaderboard dataset, and this nearly ruined the experiment.**
+  The public `nebius/SWE-rebench` (21,336 instances) **stops at 2025 — zero 2026 tasks.** The
+  post-cutoff splits (`2026_01`: 48 · `2026_02`: 57 · `2026_03`: 110) live exclusively in
+  `nebius/SWE-rebench-leaderboard` — the one that was 401ing. **Decontamination, the sole reason
+  this benchmark was chosen, sits entirely behind that token.** Without checking the date
+  distribution we would have run on 2024 tasks while believing the benchmark was fresh, and the
+  scaffolding effect would have been silently compressed by memorisation. **Always assert the
+  `created_at` range of the split you are about to run.** Opus 4.8's cutoff is 2026-01, so
+  `2026_02` and `2026_03` are the safe splits today; this shifts with every model release.
+- **Difficulty metadata exists, but not where it is needed, and it is not what the paper asks for.**
+  `nebius/SWE-rebench` carries `meta.llm_score.difficulty_score` (plus `issue_text_score`,
+  `test_score`, `is_lite`, `num_modified_files`). The **leaderboard splits do not carry it**. And
+  it is an **LLM's opinion of difficulty**, not an **empirical pass rate across models** — which
+  is what the mid-range (30–70%) filter actually requires. The two are not interchangeable. The
+  empirical rates must come from the published swe-rebench.com per-model results, or be estimated
+  ourselves with a cheap model.
+- **Useful fields we get for free:** `docker_image` (which pre-built image to pull),
+  `created_at` (date-based decontamination), and `interface` / `harbor_cpus` / `harbor_memory` /
+  `harbor_verifier_timeout_sec` — **they already support Harbor**, which is the natural way to
+  plug the different agent harnesses in later.
+
+**Disk:** each instance caches its own image (~1–2 GB). Fine for now (253 GB free), but a
+30-instance paired run needs planning, and `--cache_level` is the knob.
+
+---
+
+## 9. Still open, and honest
+
+- **The "6x from the harness" claim is unverified** (§2). It is the premise of the whole repo.
+- **Empirical per-task pass rates** are still missing — see §8. Needed for the mid-range filter.
+- **Cost is expected to be ~zero, still to be confirmed.** The plan drives the CLI agents Gabriel
+  already pays for by subscription (`claude -p`, `opencode run`, `codex exec`) rather than calling
+  an API in a loop; Docker and the scorer are local. The `litellm` proxy on the desktop (`:4000`)
+  is up but needs a key — relevant only if raw-model runs are ever wanted.
+- **The sandbox leaks of §6 are NOT yet closed.** The gold run did not involve an agent, so
+  nothing has been at risk yet. They must be closed before the first agent run, not after.
