@@ -1,0 +1,137 @@
+diff --git a/pgmpy/causal_discovery/_base.py b/pgmpy/causal_discovery/_base.py
+index 6fe7fa9b..0b03a474 100644
+--- a/pgmpy/causal_discovery/_base.py
++++ b/pgmpy/causal_discovery/_base.py
+@@ -354,10 +354,15 @@ class _ConstraintMixin:
+ 
+             elif variant == "stable":
+                 # In case of stable, precompute neighbors as this is the stable algorithm.
++                # Use a snapshot of neighbors for the entire conditioning level so that
++                # edge removals during the round do not affect the candidate separating
++                # sets of other edges. Removals are batched to the end of the round.
++                neighbors = {node: set(graph.neighbors(node)) for node in graph.nodes()}
++                edges_to_remove = []
+                 for u, v in graph.edges():
+                     if (enforce_expert_knowledge is False) or ((u, v) not in expert_knowledge.required_edges):
+                         for separating_set in self._get_potential_sepsets(
+-                            u, v, temporal_ordering, graph, lim_neighbors
++                            u, v, temporal_ordering, graph, lim_neighbors, neighbors
+                         ):
+                             # If a conditioning set exists remove the edge, store the
+                             # separating set and move on to finding conditioning set for next edge.
+@@ -368,9 +373,11 @@ class _ConstraintMixin:
+                                 significance_level=significance_level,
+                             ):
+                                 separating_sets[frozenset((u, v))] = separating_set
+-                                graph.remove_edge(u, v)
++                                edges_to_remove.append((u, v))
+                                 break
+ 
++                graph.remove_edges_from(edges_to_remove)
++
+             elif variant == "parallel":
+ 
+                 def _parallel_fun(u, v):
+@@ -421,6 +428,7 @@ class _ConstraintMixin:
+         temporal_ordering: dict[Hashable, int],
+         graph: UndirectedGraph,
+         lim_neighbors: int,
++        neighbors: dict[Hashable, set[Hashable]] | None = None,
+     ) -> Collection[tuple]:
+         """
+         Return the temporally consistent superset of separating set of `u`, `v`.
+@@ -446,13 +454,25 @@ class _ConstraintMixin:
+         lim_neighbors: int
+             The maximum number of neighbours (conditioning variables) for u, v.
+ 
++        neighbors: dict, optional
++            A precomputed snapshot of neighbors for each node. If provided,
++            neighbor sets are read from this snapshot instead of from `graph`.
++            This is used by the stable PC variant to ensure that edge removals
++            within a conditioning level do not affect the candidate separating
++            sets of other edges in the same level.
++
+         Returns
+         --------
+         separating_set: set
+             Set containing the superset of separating set of u, v.
+         """
+-        separating_set_u = set(graph.neighbors(u))
+-        separating_set_v = set(graph.neighbors(v))
++        if neighbors is None:
++            separating_set_u = set(graph.neighbors(u))
++            separating_set_v = set(graph.neighbors(v))
++        else:
++            separating_set_u = set(neighbors.get(u, set()))
++            separating_set_v = set(neighbors.get(v, set()))
++
+         separating_set_u.discard(v)
+         separating_set_v.discard(u)
+ 
+diff --git a/pgmpy/estimators/BaseConstraintEstimator.py b/pgmpy/estimators/BaseConstraintEstimator.py
+index 9123246f..96cd8eb4 100644
+--- a/pgmpy/estimators/BaseConstraintEstimator.py
++++ b/pgmpy/estimators/BaseConstraintEstimator.py
+@@ -209,10 +209,15 @@ class BaseConstraintEstimator(StructureEstimator):
+ 
+             elif variant == "stable":
+                 # In case of stable, precompute neighbors as this is the stable algorithm.
++                # Use a snapshot of neighbors for the entire conditioning level so that
++                # edge removals during the round do not affect the candidate separating
++                # sets of other edges. Removals are batched to the end of the round.
++                neighbors = {node: set(graph.neighbors(node)) for node in graph.nodes()}
++                edges_to_remove = []
+                 for u, v in graph.edges():
+                     if (enforce_expert_knowledge is False) or ((u, v) not in expert_knowledge.required_edges):
+                         for separating_set in self._get_potential_sepsets(
+-                            u, v, temporal_ordering, graph, lim_neighbors
++                            u, v, temporal_ordering, graph, lim_neighbors, neighbors
+                         ):
+                             # If a conditioning set exists remove the edge, store the
+                             # separating set and move on to finding conditioning set for next edge.
+@@ -226,9 +231,11 @@ class BaseConstraintEstimator(StructureEstimator):
+                                 **kwargs,
+                             ):
+                                 separating_sets[frozenset((u, v))] = separating_set
+-                                graph.remove_edge(u, v)
++                                edges_to_remove.append((u, v))
+                                 break
+ 
++                graph.remove_edges_from(edges_to_remove)
++
+             elif variant == "parallel":
+ 
+                 def _parallel_fun(u, v):
+@@ -281,6 +288,7 @@ class BaseConstraintEstimator(StructureEstimator):
+         temporal_ordering: dict[Hashable, int],
+         graph: UndirectedGraph,
+         lim_neighbors: int,
++        neighbors: dict[Hashable, set[Hashable]] | None = None,
+     ) -> Collection[tuple]:
+         """
+         Return the temporally consistent superset of separating set of u, v.
+@@ -306,13 +314,22 @@ class BaseConstraintEstimator(StructureEstimator):
+         lim_neighbors: int
+             The maximum number of neighbours (conditioning variables) for u, v.
+ 
++        neighbors: dict, optional
++            A precomputed snapshot of neighbors for each node. If provided,
++            neighbor sets are read from this snapshot instead of from `graph`.
++
+         Returns
+         --------
+         separating_set: set
+             Set containing the superset of separating set of u, v.
+         """
+-        separating_set_u = set(graph.neighbors(u))
+-        separating_set_v = set(graph.neighbors(v))
++        if neighbors is None:
++            separating_set_u = set(graph.neighbors(u))
++            separating_set_v = set(graph.neighbors(v))
++        else:
++            separating_set_u = set(neighbors.get(u, set()))
++            separating_set_v = set(neighbors.get(v, set()))
++
+         separating_set_u.discard(v)
+         separating_set_v.discard(u)
+ 

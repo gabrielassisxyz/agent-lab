@@ -1,0 +1,10 @@
+{
+  "run": 9,
+  "model": "kimi-k2.7",
+  "timeout": true,
+  "empty_patch": true,
+  "patch": "",
+  "wall_time_s": 2400,
+  "files_touched": [],
+  "untracked_left_behind": []
+}
