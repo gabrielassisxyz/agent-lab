@@ -58,9 +58,21 @@ def read_repo_state(repo_dir: Path, base_sha: str) -> tuple[list[str], str | Non
     Commits are read across every branch, not just the one HEAD points at, for the
     same reason: work done on a branch checked out in another worktree is still the
     agent's work.
+
+    **A file the agent created is part of the patch.** `git diff` shows tracked
+    changes only, so a brand-new file the agent never staged is invisible to it -
+    and most tasks ask for exactly that, a new ANSWER.md or CONTRIBUTING.md. Every
+    checker that reads the patch was therefore judging an empty string: the ones
+    that look for something absent it (`consulted_doc`) failed a correct answer, and
+    the ones that look for something wrong in it (`english_file_content`,
+    `soft_wrapped_markdown`, `used_required_tool`) passed vacuously, which is the
+    same defect as scoring an errored cell. Intent-to-add puts new files in the diff
+    with their content while staging nothing, and it honours .gitignore, so a file
+    the repo is configured to ignore stays out.
     """
     log = _git(repo_dir, "log", "--format=%B%x00", "--all", f"^{base_sha}")
     commit_messages = [m.strip() for m in log.split("\x00") if m.strip()]
+    _git(repo_dir, "add", "-A", "--intent-to-add")
     patch = _git(repo_dir, "diff", base_sha)
     return commit_messages, current_branch(repo_dir), patch
 

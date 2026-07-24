@@ -235,6 +235,42 @@ class TestAxesReachTheAgent(unittest.TestCase):
         self.assertEqual(out.rep, 2)
 
 
+class TestNewFilesAreInThePatch(unittest.TestCase):
+    """A file the agent created, and never staged, is still the agent's work.
+
+    `git diff` reports tracked changes only, so before this the patch was empty for
+    every task that asks for a new file - which is most of them. That is not a
+    cosmetic gap: a checker looking for something *in* the patch failed a correct
+    answer, and a checker looking for something *wrong* in it passed on nothing at
+    all, the same way an errored cell would score as perfect adherence. Both shapes
+    are asserted here, because fixing one and leaving the other reads as green.
+    """
+
+    def test_a_created_file_reaches_a_checker_that_looks_for_content(self):
+        task = Task(id="t-doc", category="doc-consultation", rule_id="consult-conventions",
+                    instruction="Answer from the conventions doc into ANSWER.md.",
+                    setup="printf 'Review is requested with the needs-eyes label.\\n' > CONVENTIONS.md;"
+                          " git add -A; git commit -q -m 'add conventions'",
+                    checker="consulted_doc",
+                    checker_args={"doc": "CONVENTIONS.md", "expected": "needs-eyes"})
+        agent = FakeAgent(commands=["cat CONVENTIONS.md",
+                                    "printf 'Use the needs-eyes label.\\n' > ANSWER.md"],
+                          reads=["CONVENTIONS.md"], final_text="done")
+        out = run_task(task, "hybrid", agent, _CORPUS)
+        self.assertTrue(out.outcome.passed, out.outcome.detail)
+
+    def test_a_created_file_cannot_pass_a_checker_vacuously(self):
+        task = Task(id="t-wrap", category="format-language", rule_id="soft-wrap-markdown",
+                    instruction="Write CONTRIBUTING.md.",
+                    setup="", checker="soft_wrapped_markdown")
+        agent = FakeAgent(
+            commands=["printf 'A paragraph that is hard wrapped\\nacross two lines.\\n' > CONTRIBUTING.md"],
+            final_text="done")
+        out = run_task(task, "hybrid", agent, _CORPUS)
+        self.assertFalse(out.outcome.passed, "an unstaged new file scored as compliant")
+        self.assertEqual(out.outcome.failure_mode, "wrong-convention")
+
+
 class _BrokenAgent:
     """An agent whose call failed: no trajectory, an error instead."""
 
