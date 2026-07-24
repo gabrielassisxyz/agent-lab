@@ -63,6 +63,23 @@ class TestCapture(ShimCase):
         shim = self._install(block=False)
         self.assertEqual(shim.commands(), [])
 
+    def test_a_multiline_argument_stays_one_command(self):
+        # A commit message with a body used to split across log lines, so its prose
+        # was read back as separate commands. A message that merely quoted a
+        # destructive command would then be scored as having run one.
+        shim = self._install(block=False)
+        self._run(shim, "git commit -q --allow-empty -m 'docs: x' -m 'first line\nsecond line'")
+        self.assertEqual(len(shim.commands()), 1)
+        self.assertIn("second line", shim.commands()[0])
+
+    def test_prose_quoting_a_destructive_command_is_not_a_command(self):
+        shim = self._install(block=False)
+        self._run(shim, "git commit -q --allow-empty -m 'docs: note' "
+                        "-m 'Reviewers: never run\ngit clean -fd here'")
+        from .checkers import no_destructive_git
+        from .schema import AgentResult
+        self.assertTrue(no_destructive_git(AgentResult(commands=shim.commands())).passed)
+
     def test_a_destructive_command_is_captured_when_not_blocking(self):
         # Capture and enforcement are separate: without the gate the command runs,
         # and the checker is what fails the cell afterwards.
