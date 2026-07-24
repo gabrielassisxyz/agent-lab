@@ -1,24 +1,34 @@
-"""Aggregate run outcomes into per-placement scores (Phase 3/4).
+"""Aggregate run outcomes into scores.
 
-Given the flat list of `RunOutcome`s the matrix produced, this reduces them to one
-`PlacementScore` per placement: how often the rule held, and the distribution of the
-ways it failed. Comparing those scores across placements is the whole point of the
-experiment (front-load-all vs pruned-static vs hybrid, etc.).
+Two reductions, because the experiment asks two different questions.
 
-A note on the "two-way" scoring the design calls for (per-rule compliance AND
-all-or-nothing instance success): in the current task-set each task exercises exactly
-one rule, so per-run pass rate *is* per-rule compliance, and instance success
-collapses onto it. The scissors gap between the two only opens once an instance
-carries several rules at once; the histogram of failure modes is what stays
-informative in the meantime, and is deliberately not flattened into a single number.
+`score` collapses everything to one row per placement: how often the rule held, how
+it failed when it did not, what it cost, and how many cells never produced a verdict.
+That is the "which placement" comparison.
+
+`decay` keeps the axes: one row per (placement, turns, filler). That is the question
+the whole instrument was rebuilt for, and it cannot be read off the collapsed table.
+"Where does adherence break as the session grows" is a curve, and averaging over the
+axis that defines the curve erases it.
+
+Two rules that keep these numbers honest:
+
+- **Errored cells are excluded from rates and counted separately.** A cell whose
+  agent call failed produced no behaviour, and folding it in either direction invents
+  a result. It is reported as `errored` so a table with many of them is visibly
+  untrustworthy rather than quietly wrong.
+- **Cost is reported as measured or not at all.** The token figures come from the
+  CLI's own usage report; if an adapter does not provide one they stay zero, which
+  reads as "not measured" rather than "free".
 """
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .runner import RunOutcome
+from .schema import Usage
 
 
 @dataclass(frozen=True)
@@ -28,6 +38,24 @@ class PlacementScore:
     passes: int
     pass_rate: float
     failure_modes: dict[str, int]  # mode -> count, over the failed runs
+    errored: int = 0
+    usage: Usage = field(default_factory=Usage)
+
+    @property
+    def tokens_per_cell(self) -> float:
+        total = self.usage.input_tokens + self.usage.output_tokens
+        return total / self.n if self.n else 0.0
+
+
+@dataclass(frozen=True)
+class DecayPoint:
+    placement: str
+    turns: int
+    filler_tokens: int
+    n: int
+    passes: int
+    pass_rate: float
+    errored: int = 0
 
 
 def score(outcomes: list[RunOutcome]) -> list[PlacementScore]:
@@ -37,14 +65,39 @@ def score(outcomes: list[RunOutcome]) -> list[PlacementScore]:
 
     scores: list[PlacementScore] = []
     for placement, runs in sorted(by_placement.items()):
-        n = len(runs)
-        passes = sum(1 for r in runs if r.outcome.passed)
-        modes = Counter(r.outcome.failure_mode for r in runs if not r.outcome.passed)
+        scored = [r for r in runs if not r.errored and r.outcome is not None]
+        n = len(scored)
+        passes = sum(1 for r in scored if r.outcome.passed)
+        modes = Counter(r.outcome.failure_mode for r in scored if not r.outcome.passed)
+        total = Usage()
+        for run in runs:
+            total = total + run.usage
         scores.append(PlacementScore(
             placement=placement,
             n=n,
             passes=passes,
             pass_rate=passes / n if n else 0.0,
             failure_modes=dict(modes),
+            errored=len(runs) - n,
+            usage=total,
         ))
     return scores
+
+
+def decay(outcomes: list[RunOutcome]) -> list[DecayPoint]:
+    """One row per (placement, turns, filler): the shape of adherence over distance."""
+    buckets: dict[tuple[str, int, int], list[RunOutcome]] = defaultdict(list)
+    for outcome in outcomes:
+        buckets[(outcome.placement, outcome.axes.turns, outcome.axes.filler_tokens)].append(outcome)
+
+    points = []
+    for (placement, turns, filler), runs in sorted(buckets.items()):
+        scored = [r for r in runs if not r.errored and r.outcome is not None]
+        passes = sum(1 for r in scored if r.outcome.passed)
+        points.append(DecayPoint(
+            placement=placement, turns=turns, filler_tokens=filler,
+            n=len(scored), passes=passes,
+            pass_rate=passes / len(scored) if scored else 0.0,
+            errored=len(runs) - len(scored),
+        ))
+    return points

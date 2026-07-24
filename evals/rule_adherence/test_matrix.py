@@ -10,14 +10,17 @@ from __future__ import annotations
 
 import json
 import pathlib
+import tempfile
 import unittest
 
-from .agent import FakeAgent
+from .agent import AgentRun, FakeAgent
+from .checkpoint import Checkpoint
 from .matrix import results_document, run_matrix
-from .placements import load_corpus
+from .placements import CONTROL, Axes, load_corpus
 from .runner import RunOutcome
 from .schema import CheckOutcome, Task
-from .scoring import score
+from .scoring import decay, score
+from .screening import MEASURES_PRIOR
 
 _CORPUS = load_corpus(pathlib.Path(__file__).parent / "corpus.sample.json")
 
@@ -83,6 +86,103 @@ class TestRunMatrix(unittest.TestCase):
         json.dumps(doc)  # must not raise
         self.assertEqual(doc["runs"][0]["placement"], "hybrid")
         self.assertEqual(doc["scores"][0]["pass_rate"], 1.0)
+
+    def test_the_document_carries_the_screening_evidence(self):
+        # A placement table computed over tasks that pass without any rule is a
+        # number with nothing behind it, so the verdicts travel with the results.
+        agent_for = lambda task, placement: FakeAgent(commands=["rm stray.tmp"], final_text="clean")
+        outcomes = run_matrix([_SAFETY], _CORPUS, agent_for,
+                              placements=(CONTROL, "hybrid"), reps=1)
+        doc = results_document(outcomes, score(outcomes))
+        self.assertEqual(doc["screening"][0]["task"], "t-safety")
+        self.assertEqual(doc["screening"][0]["verdict"], MEASURES_PRIOR)
+
+
+class TestAxesGrid(unittest.TestCase):
+    def test_every_axis_point_gets_its_own_cell(self):
+        agent_for = lambda task, placement: FakeAgent(commands=["rm stray.tmp"], final_text="clean")
+        axes_list = (Axes(turns=1), Axes(turns=1, filler_tokens=50), Axes(turns=3))
+        outcomes = run_matrix([_SAFETY], _CORPUS, agent_for, placements=("hybrid",),
+                              reps=2, axes_list=axes_list)
+        self.assertEqual(len(outcomes), 6)
+
+    def test_decay_keeps_the_axes_apart(self):
+        # Averaging over the axis that defines the curve is exactly how the decay
+        # question gets erased, so the decay table must not collapse the points.
+        def agent_for(task, placement):
+            return FakeAgent(commands=["rm stray.tmp"], final_text="clean")
+
+        outcomes = run_matrix([_SAFETY], _CORPUS, agent_for, placements=("hybrid",),
+                              reps=1, axes_list=(Axes(turns=1), Axes(turns=4)))
+        points = {(d.turns, d.filler_tokens): d for d in decay(outcomes)}
+        self.assertEqual(set(points), {(1, 0), (4, 0)})
+
+
+class TestCheckpointedMatrix(unittest.TestCase):
+    def test_a_resumed_run_skips_what_is_already_done(self):
+        calls = []
+
+        def agent_for(task, placement):
+            calls.append(placement)
+            return FakeAgent(commands=["rm stray.tmp"], final_text="clean")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Checkpoint(pathlib.Path(tmp))
+            run_matrix([_SAFETY], _CORPUS, agent_for, placements=("hybrid",),
+                       reps=2, checkpoint=cp)
+            self.assertEqual(len(calls), 2)
+
+            # Second pass over the same grid: nothing left to do.
+            calls.clear()
+            outcomes = run_matrix([_SAFETY], _CORPUS, agent_for, placements=("hybrid",),
+                                  reps=2, checkpoint=cp)
+            self.assertEqual(calls, [])
+            self.assertEqual(len(outcomes), 2)
+
+    def test_widening_the_grid_only_runs_the_new_cells(self):
+        calls = []
+
+        def agent_for(task, placement):
+            calls.append(placement)
+            return FakeAgent(commands=["rm stray.tmp"], final_text="clean")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Checkpoint(pathlib.Path(tmp))
+            run_matrix([_SAFETY], _CORPUS, agent_for, placements=("hybrid",),
+                       reps=1, checkpoint=cp)
+            calls.clear()
+            outcomes = run_matrix([_SAFETY], _CORPUS, agent_for,
+                                  placements=("hybrid", CONTROL), reps=1, checkpoint=cp)
+            self.assertEqual(calls, [CONTROL])
+            self.assertEqual(len(outcomes), 2)
+
+    def test_an_errored_cell_is_retried_on_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Checkpoint(pathlib.Path(tmp))
+            run_matrix([_SAFETY], _CORPUS, lambda t, p: _BrokenAgent(),
+                       placements=("hybrid",), reps=1, checkpoint=cp)
+            self.assertEqual(cp.completed(), set())
+
+            outcomes = run_matrix(
+                [_SAFETY], _CORPUS,
+                lambda t, p: FakeAgent(commands=["rm stray.tmp"], final_text="clean"),
+                placements=("hybrid",), reps=1, checkpoint=cp)
+            self.assertEqual(len(outcomes), 1)
+            self.assertFalse(outcomes[0].errored)
+
+    def test_a_run_that_never_finished_can_still_be_scored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Checkpoint(pathlib.Path(tmp))
+            run_matrix([_SAFETY], _CORPUS,
+                       lambda t, p: FakeAgent(commands=["rm stray.tmp"], final_text="clean"),
+                       placements=("hybrid",), reps=1, checkpoint=cp)
+            # Nothing else ran; the aggregation reads the checkpoint, not memory.
+            self.assertEqual(score(cp.outcomes())[0].pass_rate, 1.0)
+
+
+class _BrokenAgent:
+    def run(self, turns, repo_dir, env=None):
+        return AgentRun(events=[], error="exit 1: rate limited")
 
 
 if __name__ == "__main__":
