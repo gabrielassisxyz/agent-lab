@@ -21,6 +21,8 @@ Phase 0 (the task-set and checkers) and Phase 1 (the runner pipeline):
 | `runner.py` | `run_task`: stage setup, compose, drive the agent, reduce, check |
 | `matrix.py` | `run_matrix`: every task under every placement, repeated; results document |
 | `scoring.py` | aggregate outcomes into a per-placement score (pass rate + failure-mode histogram) |
+| `cli_agent.py` | `parse_claude_stream` + `ClaudeCliAgent`: drive a real agent CLI and reduce its transcript |
+| `run.py` | the experiment entrypoint: run the matrix with a real agent and write `results.json` |
 | `test_*.py` | unit + end-to-end tests (a pass, a fail, and the surface-compliance case) |
 
 ## The design rule
@@ -60,13 +62,26 @@ the variance across a cell's reps. With a deterministic agent that variance is z
 by construction, which is exactly why the real, stochastic agent is what makes the
 noise floor (Phase 2) meaningful; the aggregation is proven now with a fake agent.
 
+## Running it for real
+
+`run.py` drives the matrix with `ClaudeCliAgent` and writes `results.json`:
+
+```sh
+python3 -m evals.rule_adherence.run --reps 3 --model <id> --out results/rule-adherence
+```
+
+This makes real model calls and should run inside the sandbox, so it is not part of
+`bin/ci`. What CI covers is the reduction logic (`parse_claude_stream` against a
+fixture transcript) and the full pipeline through a fake agent, so everything except
+the live call is verified.
+
 ## Not done yet
 
-The real sandboxed CLI adapter (drive `claude -p` / `pi` and parse its
-`events.jsonl`) is the next increment, deliberately not stubbed: it is what turns
-the matrix from plumbing into data. Phase 2 (the noise floor) and the pre-registered
-threshold decision (Phase 4) are then operations on top of `run_matrix`, not new
-code. The classify step is a v1 match-by-category; a sharper matcher is future work.
+The live runs themselves: Phase 2 (the adherence noise floor, which is just
+`--reps N` against the stochastic agent and reading the variance) and the
+pre-registered threshold decision (Phase 4) are operations on top of `run.py`, not
+new code. A second real adapter (`pi`, codex) is the same shape as `ClaudeCliAgent`.
+The classify step is a v1 match-by-category; a sharper matcher is future work.
 
 ## Run the tests
 
