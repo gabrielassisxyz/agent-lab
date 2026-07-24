@@ -39,6 +39,11 @@ if [ ${#pyfiles[@]} -gt 0 ]; then
     python3 -m py_compile "${pyfiles[@]}" || fail=1
 fi
 
+# anti-slop gate: em-dash in prose + the tool-name leak. Canonical: llm-workflow bin/slop-guard.
+# --diff (not whole-tree): the existing design docs use em-dashes as agent-written prose, so the
+# gate judges only lines this branch adds, and is green on install.
+echo "==> slop-guard"; bin/slop-guard --diff "${SLOP_GUARD_BASE:-origin/master}" || fail=1
+
 if [ "$fail" -ne 0 ]; then
     echo "==> bin/ci FAILED"
     exit 1
