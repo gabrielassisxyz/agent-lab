@@ -86,7 +86,9 @@ README.
 The live runs themselves: Phase 2 (the adherence noise floor, which is just
 `--reps N` against the stochastic agent and reading the variance) and the
 pre-registered threshold decision (Phase 4) are operations on top of `run.py`, not
-new code. A second real adapter (`pi`, codex) is the same shape as `ClaudeCliAgent`.
+new code. A second real adapter (`pi`, codex) is the same shape as `ClaudeCliAgent`; the
+full plan for the `pi`, `codex`, and `agy` adapters (with the shared git-shim
+design) is in [`../../docs/experiments/agent-adapters-plan.md`](../../docs/experiments/agent-adapters-plan.md).
 The classify step is a v1 match-by-category; a sharper matcher is future work.
 
 ## Run the tests
