@@ -35,6 +35,7 @@ class AgentResult:
     pr_body: str | None = None
     files_read: list[str] = field(default_factory=list)
     reply_language: str | None = None          # ISO code, when the runner detects it
+    patch: str = ""                            # git diff of the agent's changes since base
 
 
 @dataclass(frozen=True)
