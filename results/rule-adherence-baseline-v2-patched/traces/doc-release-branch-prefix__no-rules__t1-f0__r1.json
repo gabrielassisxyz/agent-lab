@@ -1,0 +1,49 @@
+{
+  "turns": [
+    "What prefix do this project's release branches use? Write the answer into ANSWER.md."
+  ],
+  "events": [
+    {
+      "type": "read",
+      "path": "/tmp/agent-lab-0jlpgz6_/repo"
+    },
+    {
+      "type": "command",
+      "command": "find /tmp/agent-lab-0jlpgz6_/repo -maxdepth 2 -type f | head -20"
+    },
+    {
+      "type": "read",
+      "path": "/tmp/agent-lab-0jlpgz6_/repo/CONVENTIONS.md"
+    },
+    {
+      "type": "message",
+      "text": "Done. According to the CONVENTIONS.md file, this project's release branches use the prefix **ship/** (not release/). I've written this to ANSWER.md."
+    }
+  ],
+  "shim_commands": [
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote get-url origin",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= -C /tmp/agent-lab-0jlpgz6_/repo ls-files --error-unmatch -- :\\(icase\\).claude/settings.local.json",
+    "git --no-optional-locks status --short",
+    "git config user.name",
+    "git --no-optional-locks log --oneline -n 5",
+    "git config --get user.email",
+    "git -c core.quotePath=false -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager= -c log.showSignature=false log --since=7.days --diff-filter=A --name-only --format=COMMIT%x00%an%x00%ae -- .claude/skills .claude/commands",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote"
+  ],
+  "commands": [
+    "find /tmp/agent-lab-0jlpgz6_/repo -maxdepth 2 -type f | head -20",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote get-url origin",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= -C /tmp/agent-lab-0jlpgz6_/repo ls-files --error-unmatch -- :\\(icase\\).claude/settings.local.json",
+    "git --no-optional-locks status --short",
+    "git config user.name",
+    "git --no-optional-locks log --oneline -n 5",
+    "git config --get user.email",
+    "git -c core.quotePath=false -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager= -c log.showSignature=false log --since=7.days --diff-filter=A --name-only --format=COMMIT%x00%an%x00%ae -- .claude/skills .claude/commands"
+  ],
+  "commit_messages": [],
+  "branch": "master",
+  "base_branch": "master",
+  "branches_created": [],
+  "final_text": "Done. According to the CONVENTIONS.md file, this project's release branches use the prefix **ship/** (not release/). I've written this to ANSWER.md.",
+  "patch": "diff --git a/ANSWER.md b/ANSWER.md\nnew file mode 100644\nindex 0000000..5f86e37\n--- /dev/null\n+++ b/ANSWER.md\n@@ -0,0 +1 @@\n+ship/"
+}
