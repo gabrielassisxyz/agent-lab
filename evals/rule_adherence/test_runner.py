@@ -259,6 +259,18 @@ class TestNewFilesAreInThePatch(unittest.TestCase):
         out = run_task(task, "hybrid", agent, _CORPUS)
         self.assertTrue(out.outcome.passed, out.outcome.detail)
 
+    def test_the_patch_is_kept_in_the_trace(self):
+        # The trace is what lets a checker fix be re-scored from disk, with no model
+        # call - this lab has now mistrusted a checker three times. Without the patch
+        # in the trace, re-scoring a patch-reading checker always means a full re-run.
+        task = Task(id="t-doc", category="doc-consultation", rule_id="consult-conventions",
+                    instruction="Write ANSWER.md.", setup="", checker="consulted_doc",
+                    checker_args={"doc": "CONVENTIONS.md"})
+        agent = FakeAgent(commands=["printf 'the answer\\n' > ANSWER.md"], final_text="done")
+        out = run_task(task, "hybrid", agent, _CORPUS)
+        self.assertIn("ANSWER.md", out.trace["patch"])
+        self.assertIn("the answer", out.trace["patch"])
+
     def test_a_created_file_cannot_pass_a_checker_vacuously(self):
         task = Task(id="t-wrap", category="format-language", rule_id="soft-wrap-markdown",
                     instruction="Write CONTRIBUTING.md.",

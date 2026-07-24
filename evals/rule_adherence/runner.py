@@ -159,6 +159,13 @@ def _run_in(cell_dir: Path, task: Task, placement: str, agent: Agent, corpus: li
         "branch": result.branch, "base_branch": result.base_branch,
         "branches_created": result.branches_created,
         "final_text": result.final_text,
+        # Kept so a checker fix can be re-scored from disk, with no model call. This
+        # lab has now mistrusted a checker three times (destructive-git by string
+        # match, soft-wrap by rule of thumb, and the patch going empty for every
+        # unstaged new file); the patch is the one fact a checker reads that nothing
+        # else in the trace captures, so without it a checker fix always costs a full
+        # re-run instead of seconds.
+        "patch": result.patch,
     }
     check = get_checker(task.checker)(result, **task.checker_args)
     return RunOutcome(outcome=check, trace=trace, **common)
