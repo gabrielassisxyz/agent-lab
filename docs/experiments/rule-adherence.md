@@ -31,6 +31,47 @@ configuration for any specific set of models/repos/rules:
 
 None of these is measured for *this* stack. That is the gap this experiment closes.
 
+## The question, sharpened: prevention, not recovery
+
+The literature's strongest result is about **recovery**: re-inject a rule after it has
+been violated and adherence improves. That is not the question worth spending on here,
+because the operator's own experience already answers it (re-stating a rule does work)
+and because the cost being felt is not the violation, it is the *repeating*.
+
+So the target is: **what is the cheapest context configuration that keeps adherence at
+100% without the rule being restated?** That reframing decides what the instrument has
+to be able to see.
+
+- The primary measurement is a **decay curve**, not a ranking. "Where does adherence
+  break as the session grows" is a shape over distance, turns and context size. A table
+  that averages over those axes has erased the answer.
+- **Enforcement stops being the object of study and becomes the fallback.** If no
+  placement holds a rule to 100% at the working distance, the actionable conclusion is
+  that this rule needs a deterministic gate rather than louder prose. The
+  `unreachable-by-text` verdict in the screening is exactly that finding.
+- **The control arm answers a question worth asking on its own:** which rules does the
+  model already follow unprompted? Those cost context and buy nothing, and the screening
+  names them (`measures-prior`).
+
+## What the first full run settled
+
+The full grid at the design's own rigor (6 tasks, 5 placements, 3 reps, Opus, 90 cells)
+returned a null: every placement scored 15/18. The diagnosis is recorded with the data
+in `results/rule-adherence/README.md`, and the short version is that the null was
+**guaranteed by construction**, for reasons that are all instrument, not model:
+
+- With a 4-rule corpus, the placements produced prompts differing by at most six bullet
+  lines. There was no distance, therefore no independent variable. The axes below were
+  all collapsed to a single point.
+- Five of six tasks passed in every arm and one failed in every arm, so no task was
+  decided by placement (the saturated-metric trap of `../DESIGN.md` section 10).
+- The enforcement arm composed text identical to `hybrid` and applied no gate, only a
+  label on the record.
+
+Everything in the next two sections exists because of that run. It is why the control
+arm, the filler, the multi-turn driver and the real gate were built before any further
+model time was spent.
+
 ## What is measured
 
 **Placements (the independent variable):**
@@ -108,6 +149,32 @@ corpus *trigger* field is the signal the classify step matches against.
 per-prompt hook, and an autonomous orchestrator that recomposes the prompt at every
 subtask/tool-call/phase/failure boundary — so it is built as a **library**, not a hook. This
 experiment only needs the interactive path to run.
+
+## The shape of the grid: one factor at a time, not a full cross
+
+Crossing every axis with every placement, category and rep is roughly **30,000 cells per
+model**, and the multi-turn cells cost five to fifty times a single-turn one. That is not
+a plan, it is an intention. Three of the axes are also the same phenomenon (dilution
+between the rule and the point of generation), and rule distance only exists *inside* a
+multi-turn run, so they are nested rather than crossed.
+
+The design is therefore **one factor at a time from a baseline**, which is the standard
+shape for a screening experiment. Every axis is measured; not every combination is.
+
+**The baseline sweep is also the task screener.** Run every task under all arms including
+the control at one baseline point. Then:
+
+- a task that passes the control is `measures-prior` and leaves the set,
+- a task that fails every arm is `unreachable-by-text` and is reported as a candidate for
+  a deterministic gate,
+- what remains is `admissible`, and only those tasks are carried into the expensive axes.
+
+That cut is what makes the multi-turn and long-context sweeps affordable, and it is
+computed from data rather than judgement (`evals/rule_adherence/screening.py`).
+
+`run.py --dry-run` prints the cell count, the agent-call count and the largest composed
+session for any grid before it runs. A grid whose cost nobody has looked at is a grid
+nobody decided to run.
 
 ## Phases
 

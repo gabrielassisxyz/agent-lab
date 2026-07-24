@@ -11,19 +11,24 @@ Phase 0 (the task-set and checkers) and Phase 1 (the runner pipeline):
 
 | file | what |
 | --- | --- |
-| `schema.py` | `Task`, `AgentResult`, `CheckOutcome`, the closed `FAILURE_MODES` set, `load_tasks` |
+| `schema.py` | `Task`, `AgentResult`, `Usage`, `CheckOutcome`, the closed `FAILURE_MODES` set, `load_tasks` |
 | `checkers.py` | the deterministic checkers + the name-to-function `REGISTRY` |
+| `destructive.py` | the destructive-git patterns, shared by the checker and the enforcement gate |
 | `tasks.json` | the task-set: each task is `(instruction, triggered rule, checker)` |
-| `placements.py` | compose the prompt under each of the five placements; the classify-by-category matcher |
+| `placements.py` | compose the session under each placement, at a chosen distance (`Axes`); the classify-by-category matcher |
+| `context.py` | the distance filler: inert padding within a turn and across turns |
 | `corpus.sample.json` | a small vendored rule corpus (id, category, trigger, text) for the composer |
-| `agent.py` | the `Agent` adapter protocol + `FakeAgent` (a real test double) |
+| `agent.py` | the `Agent` adapter protocol (session + env), `AgentRun`, and `FakeAgent` (a real test double) |
+| `gitshim.py` | capture the agent's git commands, and block the destructive ones for the enforcement arm |
 | `trajectory.py` | reduce a trajectory + the repo the agent left behind into an `AgentResult` |
-| `runner.py` | `run_task`: stage setup, compose, drive the agent, reduce, check |
-| `matrix.py` | `run_matrix`: every task under every placement, repeated; results document |
-| `scoring.py` | aggregate outcomes into a per-placement score (pass rate + failure-mode histogram) |
-| `cli_agent.py` | `parse_claude_stream` + `ClaudeCliAgent`: drive a real agent CLI and reduce its transcript |
-| `run.py` | the experiment entrypoint: run the matrix with a real agent and write `results.json` |
-| `test_*.py` | unit + end-to-end tests (a pass, a fail, and the surface-compliance case) |
+| `runner.py` | `run_task`: stage setup, compose, install the shim, drive the agent, reduce, check |
+| `matrix.py` | `run_matrix`: every task, placement and axis point, repeated; results document |
+| `checkpoint.py` | per-cell durability: record each cell as it finishes, resume from what is on disk |
+| `screening.py` | the admission test: which tasks are entitled to be in a placement comparison |
+| `scoring.py` | per-placement scores, and `decay`: the pass rate as a function of distance |
+| `cli_agent.py` | `parse_claude_stream` + `ClaudeCliAgent`: drive a real agent CLI across turns and reduce its transcript |
+| `run.py` | the experiment entrypoint: run the grid, resume it, or describe it with `--dry-run` |
+| `test_*.py` | unit + end-to-end tests (a pass, a fail, the surface-compliance case, the gate, and resume) |
 
 ## The design rule
 
@@ -37,20 +42,56 @@ running a forbidden command and **owning it** (`violation`) versus running it wh
 reporting success without disclosing it (`surface-compliance`), the illusion of
 compliance, which is why adherence is scored two ways.
 
-## The runner pipeline (Phase 1)
+## The runner pipeline
 
-`run_task(task, placement, agent, corpus)` is one cell of the matrix:
+`run_task(task, placement, agent, corpus, axes, rep)` is one cell of the matrix:
 
 1. stage a throwaway git repo and run `task.setup` (the starting state),
-2. capture the base sha, so only the agent's own commits are attributed to it,
-3. `compose` the prompt for the placement over the rule corpus,
-4. drive the `Agent`, reduce its trajectory + the repo it left into an `AgentResult`,
-5. run the checker.
+2. capture the base sha **and the base branch**, so only the agent's own work is
+   attributed to it and "never branched" stays distinguishable from "branched badly",
+3. install the git shim (blocking, when the placement is the enforcement arm),
+4. `compose` the session for the placement and the axes over the rule corpus,
+5. drive the `Agent` across its turns, reduce its trajectory + the repo it left into
+   an `AgentResult`,
+6. run the checker.
 
 The repo is **hermetic**: hooks point at an empty dir, so the operator's global git
-hooks never fire and skew a cell. `FakeAgent` is a real test double, not a mock: it
+hooks never fire and skew a cell. The shim and its log live **beside** the repo, never
+inside it, or the instrument would be planting the untracked file that a "clean up the
+stray files" task is then scored on. `FakeAgent` is a real test double, not a mock: it
 executes its scripted commands inside the repo, so the pipeline is proven end to end
 with no model call.
+
+## The three things that make a result mean something
+
+**The control arm.** `no-rules` composes the instruction with no rule text anywhere. A
+task that passes it is not measuring rule adherence, it is measuring what the model
+does unprompted. `screening.py` turns that into a verdict per task: `admissible`,
+`measures-prior`, or `unreachable-by-text` (fails even with the rule next to the
+query, which is the evidence for gating that rule instead of rewording it).
+
+**Distance.** `Axes(turns=N, filler_tokens=K)` puts real space between the rule and the
+moment it decides something, within a turn and across turns. Filler is **identical in
+every arm** so that placement is never confounded with context length, and it is
+**inert** by construction and by assertion: padding that mentioned a git command would
+be logged by the shim and charged to the agent, silently turning every safety cell into
+a false violation.
+
+**Enforcement that enforces.** The `hybrid-enforcement` arm installs the shim in
+blocking mode, so a destructive command is refused and the agent reads a correction.
+Before this, the arm composed the same text as `hybrid` and applied nothing but a label,
+so the hypothesis it is named after had never been tested.
+
+## Durability
+
+Every cell is appended to `cells.jsonl` under `--out` the moment it finishes, with its
+trajectory written to `traces/`. Re-invoking the same command resumes: finished cells
+are skipped, errored ones are retried. A kill costs at most the cell in flight, and a
+run that never finished can still be scored from its checkpoint.
+
+An agent call that fails is recorded as **errored**, never scored. An empty trajectory
+satisfies every "did not do the forbidden thing" checker, so a rate-limited or
+timed-out call would otherwise be written down as perfect adherence.
 
 ## The matrix and scoring (Phase 3/4)
 
@@ -64,11 +105,28 @@ noise floor (Phase 2) meaningful; the aggregation is proven now with a fake agen
 
 ## Running it for real
 
-`run.py` drives the matrix with `ClaudeCliAgent` and writes `results.json`:
+Look at the grid before paying for it. `--dry-run` calls no model:
+
+```sh
+python3 -m evals.rule_adherence.run --dry-run --reps 3 --turns 1,5,20,50 --filler 0,8000,32000
+```
+
+The baseline sweep, which is also the task screener (all arms, one axis point):
 
 ```sh
 python3 -m evals.rule_adherence.run --reps 3 --model <id> --out results/rule-adherence
 ```
+
+Then one axis at a time, over the tasks the screening admitted:
+
+```sh
+python3 -m evals.rule_adherence.run --reps 3 --model <id> \
+  --tasks <admissible ids> --placements hybrid,jit-near-query \
+  --turns 1,5,20,50 --out results/rule-adherence-turns
+```
+
+Re-running the same command resumes it. `--out` is the identity of a run, not just a
+destination.
 
 This makes real model calls and should run inside the sandbox, so it is not part of
 `bin/ci`. What CI covers is the reduction logic (`parse_claude_stream` against a
@@ -86,9 +144,20 @@ README.
 The live runs themselves: Phase 2 (the adherence noise floor, which is just
 `--reps N` against the stochastic agent and reading the variance) and the
 pre-registered threshold decision (Phase 4) are operations on top of `run.py`, not
-new code. A second real adapter (`pi`, codex) is the same shape as `ClaudeCliAgent`; the
-full plan for the `pi`, `codex`, and `agy` adapters (with the shared git-shim
-design) is in [`../../docs/experiments/agent-adapters-plan.md`](../../docs/experiments/agent-adapters-plan.md).
+new code.
+
+**The task-set is the remaining bottleneck.** Three categories are covered
+(safety-critical, non-standard conventions, attribution); the design calls for seven,
+at roughly five tasks each, every one with a deterministic checker. Until then the
+screening will admit only a handful of tasks, which bounds how much any sweep can say.
+
+**The adapters.** `pi`, `codex` and `agy` are the cross-family coverage the position
+question needs, and the full plan is in
+[`../../docs/experiments/agent-adapters-plan.md`](../../docs/experiments/agent-adapters-plan.md).
+The protocol change that plan anticipated (an `env` parameter for the shim) has landed
+here together with the session shape, so the three adapters can now be written once
+against a signature that will not move under them.
+
 The classify step is a v1 match-by-category; a sharper matcher is future work.
 
 ## Run the tests
