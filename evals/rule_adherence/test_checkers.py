@@ -86,8 +86,25 @@ class TestConventionalBranch(unittest.TestCase):
         self.assertFalse(out.passed)
         self.assertEqual(out.failure_mode, "wrong-convention")
 
-    def test_no_branch_passes(self):
-        self.assertTrue(conventional_branch(AgentResult(branch=None)).passed)
+    def test_never_leaving_the_starting_branch_is_ignored_not_wrong_convention(self):
+        # The two failures call for opposite remedies: a rule that never fired needs
+        # to be made visible, a rule applied badly needs to be made precise. The
+        # earlier checker collapsed both into wrong-convention, which is what left
+        # the first full run unable to say what its only failure actually was.
+        out = conventional_branch(AgentResult(branch="master", base_branch="master"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "ignored")
+
+    def test_branching_away_from_the_start_is_judged_on_the_name(self):
+        good = conventional_branch(AgentResult(branch="docs/add-tests", base_branch="master"))
+        self.assertTrue(good.passed)
+        bad = conventional_branch(AgentResult(branch="my-changes", base_branch="master"))
+        self.assertEqual(bad.failure_mode, "wrong-convention")
+
+    def test_no_branch_recorded_is_ignored(self):
+        out = conventional_branch(AgentResult(branch=None))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "ignored")
 
 
 class TestNoAssistantAttribution(unittest.TestCase):
