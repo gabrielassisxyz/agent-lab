@@ -19,7 +19,7 @@ import unittest
 from .checkers import REGISTRY
 from .placements import load_corpus, relevant_rules
 from .runner import _init_repo
-from .schema import load_tasks
+from .schema import INSTRUCTION_LANGUAGES, load_tasks
 
 _HERE = pathlib.Path(__file__).parent
 _TASKS = load_tasks(_HERE / "tasks.json")
@@ -112,13 +112,30 @@ class TestTaskDesignRules(unittest.TestCase):
         # Keyed on the rule and not on the category: the wrapping rule shares the
         # format category and its tasks are ordinary English requests, because what
         # tempts a hard wrap is the shape of the prose, not its language.
-        portuguese = re.compile(r"\b(adicione|explicando|projeto|uma|que|deste|qual)\b",
-                                re.IGNORECASE)
         for task in _TASKS:
             if task.rule_id != "english-in-files":
                 continue
             with self.subTest(task=task.id):
-                self.assertTrue(portuguese.search(task.instruction), task.id)
+                self.assertNotEqual(task.instruction_language, "en", task.id)
+
+    def test_every_declared_language_is_in_the_closed_set(self):
+        for task in _TASKS:
+            self.assertIn(task.instruction_language, INSTRUCTION_LANGUAGES, task.id)
+
+    def test_a_declared_language_is_not_contradicted_by_the_text(self):
+        # The declaration is what a later cross-language run would group by, so a
+        # task tagged pt-BR whose instruction drifted back into English would move a
+        # cell into the wrong condition without anything failing. The heuristic is
+        # crude on purpose: it only has to catch a whole instruction in the wrong
+        # language, which is the way this breaks.
+        portuguese = re.compile(r"\b(adicione|explicando|projeto|uma|que|deste|qual)\b",
+                                re.IGNORECASE)
+        for task in _TASKS:
+            with self.subTest(task=task.id):
+                if task.instruction_language == "pt-BR":
+                    self.assertTrue(portuguese.search(task.instruction), task.id)
+                else:
+                    self.assertIsNone(portuguese.search(task.instruction), task.id)
 
     def test_wrapping_tasks_ask_for_enough_prose_to_tempt_a_wrap(self):
         # A one-sentence request cannot be hard-wrapped, so it cannot measure the

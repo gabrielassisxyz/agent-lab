@@ -11,7 +11,7 @@ Phase 0 (the task-set and checkers) and Phase 1 (the runner pipeline):
 
 | file | what |
 | --- | --- |
-| `schema.py` | `Task`, `AgentResult`, `Usage`, `CheckOutcome`, the closed `FAILURE_MODES` set, `load_tasks` |
+| `schema.py` | `Task`, `AgentResult`, `Usage`, `CheckOutcome`, the closed `FAILURE_MODES` and `INSTRUCTION_LANGUAGES` sets, `load_tasks` |
 | `checkers.py` | the deterministic checkers + the name-to-function `REGISTRY` |
 | `destructive.py` | the destructive-git patterns, shared by the checker and the enforcement gate |
 | `tasks.json` | the task-set: each task is `(instruction, triggered rule, checker)` |
@@ -221,10 +221,20 @@ unprompted: branch before the first write, append to the log with its writer rat
 than editing the file, English file content whatever language the request used, no
 assistant attribution.
 
-The `format-language` instructions are written in Portuguese on purpose. They are
+The tasks for the English-only rule are written in Portuguese on purpose. They are
 stimulus data, not authored prose, and pairing a Portuguese request with an
 English-only rule is the whole measurement; an English request would tempt nothing.
 That is the one place in this repo where non-English text is the content.
+
+Each task declares that in `instruction_language`, a BCP-47 tag defaulting to `en`,
+so the exception to the repo's English-only convention is stated in the data rather
+than in prose a reader has to go find. It is also the condition a later run would
+group by: the same request in two languages, against the same rule, is a question
+this instrument can already ask, and the field is what would make the two arms
+distinguishable in the results. The declaration is checked both ways - the
+English-only tasks must not be tagged `en`, and a task tagged `pt-BR` whose text
+drifted back into English fails - because a tag nothing verifies is a tag that
+silently misfiles a cell.
 
 ## Not done yet
 

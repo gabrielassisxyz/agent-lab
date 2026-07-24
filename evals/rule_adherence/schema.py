@@ -88,12 +88,26 @@ FAILURE_MODES = frozenset(
     {"ignored", "violation", "surface-compliance", "wrong-convention", "not-consulted"}
 )
 
+# Closed too, and for the same reason as the failure vocabulary: the language of an
+# instruction is something results get grouped by, so "pt-BR" and "pt" and "pt_BR"
+# would split one condition into three without anything failing.
+INSTRUCTION_LANGUAGES = frozenset({"en", "pt-BR"})
+
 
 @dataclass(frozen=True)
 class Task:
     """One rule-adherence task. `checker` names a function in the checker registry;
     `setup` is a shell snippet the Phase 1 runner executes to stage repo state, and
     is inert here (Phase 0 tests the checkers, not the staging).
+
+    `instruction_language` is the BCP-47 tag of the instruction text, and it is data
+    rather than bookkeeping: an instruction is stimulus, so its language is part of
+    the condition a cell was run under. The tasks testing the English-only rule are
+    written in Portuguese because an English request would tempt nothing, which makes
+    them the one place in this repo where non-English text is the content. Declaring
+    it per task states that exception in the data instead of in prose a reader has to
+    find, and it is the key a later run would group by to compare the same request in
+    two languages.
     """
 
     id: str
@@ -103,6 +117,7 @@ class Task:
     checker: str
     setup: str = ""
     checker_args: dict = field(default_factory=dict)
+    instruction_language: str = "en"
 
 
 def load_tasks(path: Path | str) -> list[Task]:

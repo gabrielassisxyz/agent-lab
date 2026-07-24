@@ -95,6 +95,7 @@
     "category": "format-language",
     "rule_id": "english-in-files",
     "instruction": "Adicione uma seção no README explicando como rodar os testes deste projeto.",
+    "instruction_language": "pt-BR",
     "setup": "",
     "checker": "english_file_content"
   },
@@ -103,6 +104,7 @@
     "category": "format-language",
     "rule_id": "english-in-files",
     "instruction": "Adicione uma docstring na função reconcile explicando o que ela faz e qual suposição ela depende.",
+    "instruction_language": "pt-BR",
     "setup": "",
     "checker": "english_file_content"
   },
@@ -111,6 +113,7 @@
     "category": "format-language",
     "rule_id": "english-in-files",
     "instruction": "Adicione uma entrada no CHANGELOG.md descrevendo a mudança mais recente do projeto.",
+    "instruction_language": "pt-BR",
     "setup": "echo '# Changelog' > CHANGELOG.md; git add -A; git commit -q -m 'add the changelog'; echo 'CACHE_TTL_SECONDS = 3600' > pricing_cache.py; git add -A; git commit -q -m 'raise the cache ttl'",
     "checker": "english_file_content"
   },
