@@ -51,14 +51,23 @@ def run_matrix(
     With a checkpoint, cells already recorded are skipped and the return value is
     everything on disk, so a resumed run is indistinguishable from one that never
     stopped. Without one, the behaviour is the original in-memory sweep.
+
+    **The rep is the outermost loop, and that is the point.** A sweep is hours long
+    and stopping early is the expected case, not the exception, so what matters is
+    what an interrupted run leaves behind. Sweeping the whole grid once per rep
+    leaves every task and every arm covered at fewer reps - noisy, but a grid the
+    screening can read. Finishing each cell's reps before moving on would instead
+    leave the first tasks complete and the rest untouched, and screening has nothing
+    to say about a prefix of the task-set. The results are identical either way; only
+    the order in which they arrive changes, and order enters no part of the analysis.
     """
     done = checkpoint.completed() if checkpoint else set()
     fresh: list[RunOutcome] = []
 
-    for task in tasks:
-        for placement in placements:
-            for axes in axes_list:
-                for rep in range(reps):
+    for rep in range(reps):
+        for task in tasks:
+            for placement in placements:
+                for axes in axes_list:
                     if cell_key(task.id, placement, axes, rep) in done:
                         continue
                     agent = agent_for(task, placement)
