@@ -243,7 +243,7 @@ The live runs themselves: Phase 2 (the adherence noise floor, which is just
 pre-registered threshold decision (Phase 4) are operations on top of `run.py`, not
 new code.
 
-**Whether the task-set has headroom is still unmeasured.** Eighteen tasks now cover
+**Whether the task-set has headroom is still unmeasured.** Twenty-one tasks now cover
 six categories, and the seventh (memory and state) is the turns axis rather than a
 category of its own. Every setup is exercised by a test and every checker is unit
 tested, but no live sweep has run against them, so which of them the screening admits
