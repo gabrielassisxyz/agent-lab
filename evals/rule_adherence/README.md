@@ -19,6 +19,8 @@ Phase 0 (the task-set and checkers) and Phase 1 (the runner pipeline):
 | `agent.py` | the `Agent` adapter protocol + `FakeAgent` (a real test double) |
 | `trajectory.py` | reduce a trajectory + the repo the agent left behind into an `AgentResult` |
 | `runner.py` | `run_task`: stage setup, compose, drive the agent, reduce, check |
+| `matrix.py` | `run_matrix`: every task under every placement, repeated; results document |
+| `scoring.py` | aggregate outcomes into a per-placement score (pass rate + failure-mode histogram) |
 | `test_*.py` | unit + end-to-end tests (a pass, a fail, and the surface-compliance case) |
 
 ## The design rule
@@ -48,12 +50,23 @@ hooks never fire and skew a cell. `FakeAgent` is a real test double, not a mock:
 executes its scripted commands inside the repo, so the pipeline is proven end to end
 with no model call.
 
+## The matrix and scoring (Phase 3/4)
+
+`run_matrix(tasks, corpus, agent_for, placements, reps)` runs every cell and
+`score(outcomes)` aggregates them into one `PlacementScore` per placement (pass
+rate + a histogram of failure modes). `agent_for` is a factory called once per
+cell, because a real agent needs a fresh invocation per run and the noise floor is
+the variance across a cell's reps. With a deterministic agent that variance is zero
+by construction, which is exactly why the real, stochastic agent is what makes the
+noise floor (Phase 2) meaningful; the aggregation is proven now with a fake agent.
+
 ## Not done yet
 
 The real sandboxed CLI adapter (drive `claude -p` / `pi` and parse its
-`events.jsonl`) is the next increment, deliberately not stubbed. So is the noise
-floor for the adherence metric (Phase 2) and the full matrix (Phase 3). The
-classify step is a v1 match-by-category; a sharper matcher is future work.
+`events.jsonl`) is the next increment, deliberately not stubbed: it is what turns
+the matrix from plumbing into data. Phase 2 (the noise floor) and the pre-registered
+threshold decision (Phase 4) are then operations on top of `run_matrix`, not new
+code. The classify step is a v1 match-by-category; a sharper matcher is future work.
 
 ## Run the tests
 
