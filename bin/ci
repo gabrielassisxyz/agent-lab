@@ -47,6 +47,13 @@ if git ls-files 'evals/**/test_*.py' | grep -q .; then
     python3 -m unittest discover -s evals -p 'test_*.py' || fail=1
 fi
 
+echo "==> markdown soft wrap"
+# Hard wrap spreads by contact - every editor and agent inherits the wrap of the file
+# it is editing - and it costs nothing visible in the end state, so only a gate catches
+# it. Whole-tree rather than --diff: the tree was swept first, and a check that fails on
+# every existing file is a check that gets commented out in its second week.
+bin/md-wrap --check || fail=1
+
 # anti-slop gate: em-dash in prose + the tool-name leak. Canonical: llm-workflow bin/slop-guard.
 # --diff (not whole-tree): the existing design docs use em-dashes as agent-written prose, so the
 # gate judges only lines this branch adds, and is green on install.
