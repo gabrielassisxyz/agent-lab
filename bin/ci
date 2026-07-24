@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The deterministic gate for this repo, runnable locally — run it before any PR,
+# The deterministic gate for this repo, runnable locally - run it before any PR,
 # so "green locally" == "green in CI". This repo is Python runners + shell sandbox
 # scripts, so the gates are: no secrets, shell lints clean, Python parses.
 set -euo pipefail
@@ -11,7 +11,7 @@ echo "==> gitleaks (secret scan)"
 if command -v gitleaks >/dev/null 2>&1; then
     gitleaks git --no-banner --redact . || fail=1
 else
-    echo "gitleaks not installed — see https://github.com/gitleaks/gitleaks" >&2
+    echo "gitleaks not installed - see https://github.com/gitleaks/gitleaks" >&2
     fail=1
 fi
 
@@ -30,22 +30,27 @@ if command -v shellcheck >/dev/null 2>&1; then
         shellcheck "${scripts[@]}" || fail=1
     fi
 else
-    echo "shellcheck not installed — skipping (install: https://www.shellcheck.net)" >&2
+    echo "shellcheck not installed - skipping (install: https://www.shellcheck.net)" >&2
 fi
 
-echo "==> python syntax (py_compile — a real gate with no extra dependency)"
+echo "==> python syntax (py_compile - a real gate with no extra dependency)"
 mapfile -t pyfiles < <(git ls-files '*.py')
 if [ ${#pyfiles[@]} -gt 0 ]; then
     python3 -m py_compile "${pyfiles[@]}" || fail=1
 fi
 
-echo "==> python tests (stdlib unittest — no extra dependency)"
+echo "==> python tests (stdlib unittest - no extra dependency)"
 # Discover and run every test_*.py under evals/. The rule-adherence checkers are
 # the first real suite; this step is what proves them correct against synthetic
 # results before any agent run exists.
 if git ls-files 'evals/**/test_*.py' | grep -q .; then
     python3 -m unittest discover -s evals -p 'test_*.py' || fail=1
 fi
+
+# anti-slop gate: em-dash in prose + the tool-name leak. Canonical: llm-workflow bin/slop-guard.
+# --diff (not whole-tree): the existing design docs use em-dashes as agent-written prose, so the
+# gate judges only lines this branch adds, and is green on install.
+echo "==> slop-guard"; bin/slop-guard --diff "${SLOP_GUARD_BASE:-origin/master}" || fail=1
 
 if [ "$fail" -ne 0 ]; then
     echo "==> bin/ci FAILED"
