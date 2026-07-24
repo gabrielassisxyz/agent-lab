@@ -28,8 +28,8 @@ from .checkpoint import Checkpoint, cell_key
 from .placements import Axes, PLACEMENTS, Rule
 from .runner import RunOutcome, run_task
 from .schema import Task
-from .scoring import DecayPoint, PlacementScore, decay, score
-from .screening import TaskScreen, screen
+from .scoring import DecayPoint, PlacementScore, arm_effects, decay, score, task_effects
+from .screening import TaskScreen, admissible_ids, screen
 
 # Called once per cell to obtain the agent for it.
 AgentFor = Callable[[Task, str], Agent]
@@ -80,11 +80,46 @@ def results_document(outcomes: list[RunOutcome], scores: list[PlacementScore],
 
     The screening block is not decoration. A placement table computed over tasks that
     pass without any rule is a number with nothing behind it, so the document carries
-    the evidence for which tasks were entitled to be in it.
+    the evidence for which tasks were entitled to be in it, and the paired comparison
+    is computed over exactly those tasks.
+
+    **`effects` is the block to read, not `scores`.** Scores pool every observation
+    per arm as if they came from one coin; the design is paired, every arm runs every
+    task, and the honest unit is the task. An empty `effects` list with a populated
+    `screening` block is not a broken run, it is the finding that no task in the set
+    was entitled to be compared.
     """
     decay_points = decay(outcomes) if decay_points is None else decay_points
     screens = screen(outcomes) if screens is None else screens
+    admitted = admissible_ids(screens)
     return {
+        "admissible_tasks": admitted,
+        "effects": [
+            {
+                "placement": e.placement,
+                "tasks": e.tasks,
+                "mean_effect": e.mean_effect,
+                "sd": e.sd,
+                "standard_error": e.standard_error,
+                "standard_errors": e.standard_errors,
+                "improved": e.improved,
+                "unchanged": e.unchanged,
+                "regressed": e.regressed,
+            }
+            for e in arm_effects(outcomes, task_ids=admitted)
+        ],
+        "task_effects": [
+            {
+                "task": e.task_id,
+                "placement": e.placement,
+                "control_rate": e.control_rate,
+                "arm_rate": e.arm_rate,
+                "effect": e.effect,
+                "n_control": e.n_control,
+                "n_arm": e.n_arm,
+            }
+            for e in task_effects(outcomes)
+        ],
         "runs": [
             {
                 "task": o.task_id,

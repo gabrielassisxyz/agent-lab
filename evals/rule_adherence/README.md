@@ -106,6 +106,38 @@ blocking mode, so a destructive command is refused and the agent reads a correct
 Before this, the arm composed the same text as `hybrid` and applied nothing but a label,
 so the hypothesis it is named after had never been tested.
 
+## Reading a results document
+
+Read **`effects`**, not `scores`.
+
+`scores` pools every observation in an arm and divides, as if 63 cells were 63 draws
+from one coin. They are 21 tasks of very different difficulty, each drawn three times,
+so the honest unit of analysis is the task and the honest n is 21, not 63.
+
+Every arm runs every task, so the design is **paired**, and analysing paired data as
+unpaired discards the pairing. `effects` measures each arm *within* each task, which
+makes every task its own control and cancels the difficulty spread that otherwise
+appears as noise. On a realistic six-task example the same data reads as 1.7 standard
+errors pooled and 5.0 paired: identical mean effect, roughly three times the
+sensitivity, purely from not throwing the pairing away. That example is pinned in
+`test_scoring.py`.
+
+`effects` is computed over the tasks the screening admitted. An empty `effects` list
+next to a populated `screening` block is not a broken run; it is the finding that no
+task in the set was entitled to be compared. `task_effects` carries every task so the
+per-task picture stays visible, and it is what says *which* rule needs a gate rather
+than reporting an average that hides it.
+
+`standard_errors` is `null` when the standard error is zero, which happens with a
+single task or with identical effects across tasks. That is a small-sample artifact,
+not infinite confidence.
+
+**The pre-registered `N>=3` is almost certainly too low for a binary metric.** With a
+true rate of 0.5, three reps give a standard error of about 0.29, and a cell can only
+ever report 0, 1/3, 2/3 or 1. Pairing is what makes a modest grid readable at all; the
+run-to-run noise floor still has to be measured separately, by repeating a few
+admitted cells 15-20 times.
+
 ## Durability
 
 Every cell is appended to `cells.jsonl` under `--out` the moment it finishes, with its
