@@ -75,6 +75,12 @@ This makes real model calls and should run inside the sandbox, so it is not part
 fixture transcript) and the full pipeline through a fake agent, so everything except
 the live call is verified.
 
+A first real run exists at `results/rule-adherence/smoke-haiku-reps1.json` (full
+grid, Haiku, reps=1). It proves the pipeline produces real data, and it doubles as a
+warning: two identically-composed placements diverged on it, which is the reps=1
+noise the design says to measure away before comparing anything. See that folder's
+README.
+
 ## Not done yet
 
 The live runs themselves: Phase 2 (the adherence noise floor, which is just
