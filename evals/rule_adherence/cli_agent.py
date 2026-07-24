@@ -129,6 +129,13 @@ class ClaudeCliAgent:
     model: str | None = None
     timeout_s: int = 900
     extra_args: list[str] = field(default_factory=list)
+    # Run with the operator's own customizations disabled. A cell only measures the
+    # injected corpus if the injected corpus is the only rule set present, and by
+    # default this CLI loads the user's global instructions. In the first baseline
+    # sweep that leaked a standing "always work in a worktree" rule into every arm,
+    # including the control, and it is what produced the run's only failure mode.
+    # This is the same hermeticity the runner already enforces for git hooks.
+    isolate: bool = True
 
     def run(self, turns: list[str], repo_dir: Path,
             env: dict[str, str] | None = None) -> AgentRun:
@@ -171,6 +178,8 @@ class ClaudeCliAgent:
 
     def _command(self, turn: str, session_id: str | None) -> list[str]:
         cmd = ["claude", "-p", turn, "--output-format", "stream-json", "--verbose"]
+        if self.isolate:
+            cmd.append("--safe-mode")
         if session_id:
             cmd += ["--resume", session_id]
         if self.model:

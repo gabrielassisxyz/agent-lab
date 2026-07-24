@@ -11,14 +11,27 @@ So every task is screened against the control arm before it is allowed into a
 result, and the screening is a byproduct of the baseline sweep rather than a
 separate expense. Three verdicts:
 
-- **admissible** - fails the control and passes under at least one arm. This is the
-  only kind of task a placement comparison may be computed from.
-- **measures-prior** - passes the control at least once. The model does this
-  unprompted, so the rule is not what is being measured. It is worth knowing which
-  of a rule set falls here: those rules cost context and buy nothing.
-- **unreachable-by-text** - fails the control and fails every arm. No placement of
-  prose fixes it, which is precisely the evidence for putting that rule behind a
-  deterministic gate instead of writing it more loudly.
+- **admissible** - the control leaves headroom AND some arm reaches the task. This
+  is the only kind of task a placement comparison may be computed from.
+- **measures-prior** - the control already passes most of the time. The model does
+  this unprompted, so the rule is not what is being measured. It is worth knowing
+  which of a rule set falls here: those rules cost context and buy nothing.
+- **unreachable-by-text** - no arm gets near it. No placement of prose fixes it,
+  which is precisely the evidence for putting that rule behind a deterministic gate
+  instead of writing it more loudly.
+
+**Why a band and not a hard zero.** The strict reading ("admissible only if the
+control never passes") is cleaner to state, and it is the wrong instrument for a
+stochastic agent: it throws away exactly the tasks that sit in the middle, which are
+the ones with measurable headroom. This lab already settled that question once, and
+its answer is a band, not a point (`AGENTS.md`: task selection at a 30-70% pass rate
+"is a precondition, not an optimization"). The same shape applies here, with the
+control pass rate standing in for difficulty: a task is out if the model already
+does it, and out if nothing reaches it, and in between it can be measured.
+
+The number that matters for an admissible task is therefore the **effect**, the gap
+between the best arm and the control, not the arm's absolute pass rate. An arm at
+0.9 means nothing until you know the control was at 0.85.
 
 Errored cells are excluded before any of this; a cell that failed to run is not a
 cell that failed.
@@ -36,6 +49,11 @@ ADMISSIBLE = "admissible"
 MEASURES_PRIOR = "measures-prior"
 UNREACHABLE = "unreachable-by-text"
 
+# The band, mirroring this lab's existing task-selection rule. Above the ceiling the
+# model needs no rule; below the floor no placement reaches the task.
+CONTROL_CEILING = 0.7
+ARM_FLOOR = 0.3
+
 
 @dataclass(frozen=True)
 class TaskScreen:
@@ -49,6 +67,13 @@ class TaskScreen:
     @property
     def admissible(self) -> bool:
         return self.verdict == ADMISSIBLE
+
+    @property
+    def effect(self) -> float:
+        """How much the best placement bought over no rule at all. This, not the
+        arm's absolute pass rate, is what an admissible task actually measures.
+        """
+        return self.best_arm_pass_rate - self.control_pass_rate
 
 
 def screen(outcomes: list[RunOutcome]) -> list[TaskScreen]:
@@ -79,9 +104,9 @@ def _verdict(control: list[RunOutcome], control_rate: float, best_rate: float) -
         # Without a control arm the question cannot be answered, and guessing an
         # answer here is how an unscreened task set gets treated as a screened one.
         return "not-screened"
-    if control_rate > 0.0:
+    if control_rate > CONTROL_CEILING:
         return MEASURES_PRIOR
-    if best_rate == 0.0:
+    if best_rate < ARM_FLOOR:
         return UNREACHABLE
     return ADMISSIBLE
 

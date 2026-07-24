@@ -30,22 +30,22 @@ def _verdict(outcomes, task):
 
 
 class TestVerdicts(unittest.TestCase):
-    def test_a_task_the_model_passes_without_rules_measures_the_prior(self):
+    def test_a_task_the_model_always_passes_without_rules_measures_the_prior(self):
         outcomes = [
             _run("t", CONTROL, True),
             _run("t", "hybrid", True),
         ]
         self.assertEqual(_verdict(outcomes, "t"), MEASURES_PRIOR)
 
-    def test_one_control_pass_out_of_several_is_enough_to_disqualify(self):
-        # Sometimes doing it unprompted means the task is not cleanly measuring the
-        # rule, and a task-set built on "usually" is how a null result gets explained
-        # away rather than believed.
+    def test_partial_headroom_is_admissible_not_disqualifying(self):
+        # The strict reading ("the control must never pass") throws away exactly the
+        # middle of the range, which for a stochastic agent is where the measurable
+        # tasks live. This lab already settled that with a band rather than a point.
         outcomes = [
             _run("t", CONTROL, False), _run("t", CONTROL, False), _run("t", CONTROL, True),
-            _run("t", "hybrid", True),
+            _run("t", "hybrid", True), _run("t", "hybrid", True), _run("t", "hybrid", True),
         ]
-        self.assertEqual(_verdict(outcomes, "t"), MEASURES_PRIOR)
+        self.assertEqual(_verdict(outcomes, "t"), ADMISSIBLE)
 
     def test_failing_the_control_and_passing_an_arm_is_admissible(self):
         outcomes = [
@@ -55,6 +55,13 @@ class TestVerdicts(unittest.TestCase):
         ]
         self.assertEqual(_verdict(outcomes, "t"), ADMISSIBLE)
 
+    def test_a_control_above_the_ceiling_is_out(self):
+        outcomes = [
+            _run("t", CONTROL, True), _run("t", CONTROL, True), _run("t", CONTROL, True),
+            _run("t", "hybrid", True),
+        ]
+        self.assertEqual(_verdict(outcomes, "t"), MEASURES_PRIOR)
+
     def test_failing_every_arm_means_prose_cannot_reach_it(self):
         outcomes = [
             _run("t", CONTROL, False),
@@ -62,6 +69,24 @@ class TestVerdicts(unittest.TestCase):
             _run("t", "jit-near-query", False),
         ]
         self.assertEqual(_verdict(outcomes, "t"), UNREACHABLE)
+
+    def test_an_arm_below_the_floor_is_unreachable(self):
+        outcomes = [
+            _run("t", CONTROL, False), _run("t", CONTROL, False), _run("t", CONTROL, False),
+            _run("t", "hybrid", False), _run("t", "hybrid", False), _run("t", "hybrid", False),
+            _run("t", "jit-near-query", False), _run("t", "jit-near-query", False),
+            _run("t", "jit-near-query", False), _run("t", "jit-near-query", True),
+        ]
+        self.assertEqual(_verdict(outcomes, "t"), UNREACHABLE)
+
+    def test_effect_is_measured_against_the_control(self):
+        # An arm at 0.9 means nothing until you know the control was at 0.85.
+        outcomes = [
+            _run("t", CONTROL, False), _run("t", CONTROL, True),
+            _run("t", "hybrid", True), _run("t", "hybrid", True),
+        ]
+        found = screen(outcomes)[0]
+        self.assertAlmostEqual(found.effect, 0.5)
 
     def test_a_sweep_without_a_control_arm_says_so(self):
         self.assertEqual(_verdict([_run("t", "hybrid", True)], "t"), "not-screened")

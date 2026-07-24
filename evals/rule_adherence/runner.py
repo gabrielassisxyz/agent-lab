@@ -34,7 +34,7 @@ from .agent import Agent
 from .checkers import get_checker
 from .placements import Axes, Rule, compose, enforces_gate
 from .schema import CheckOutcome, Task, Usage
-from .trajectory import build_result, current_branch
+from .trajectory import build_result, current_branch, list_branches
 
 # Files the padding turns can actually read. Without them a filler turn asks about
 # something that does not exist, and the context it adds is an apology rather than
@@ -135,6 +135,7 @@ def _run_in(cell_dir: Path, task: Task, placement: str, agent: Agent, corpus: li
                        capture_output=True, text=True)
     base_sha = _head_sha(repo_dir)
     base_branch = current_branch(repo_dir)
+    base_branches = list_branches(repo_dir)
 
     gate = enforces_gate(placement)
     shim = gitshim.install(cell_dir / "shim", cell_dir / "git-commands.log", block=gate)
@@ -151,10 +152,12 @@ def _run_in(cell_dir: Path, task: Task, placement: str, agent: Agent, corpus: li
         return RunOutcome(error=run.error, trace=trace, **common)
 
     result = build_result(run.events, repo_dir, base_sha, base_branch=base_branch,
-                          usage=run.usage, shim_commands=shim.commands())
+                          usage=run.usage, shim_commands=shim.commands(),
+                          base_branches=base_branches)
     trace |= {
         "commands": result.commands, "commit_messages": result.commit_messages,
         "branch": result.branch, "base_branch": result.base_branch,
+        "branches_created": result.branches_created,
         "final_text": result.final_text,
     }
     return RunOutcome(outcome=get_checker(task.checker)(result), trace=trace, **common)

@@ -106,6 +106,21 @@ class TestConventionalBranch(unittest.TestCase):
         self.assertFalse(out.passed)
         self.assertEqual(out.failure_mode, "ignored")
 
+    def test_a_branch_created_in_a_worktree_counts_even_though_head_did_not_move(self):
+        # `git worktree add ../elsewhere -b docs/x` is branching, and branching
+        # correctly, while HEAD here stays put. Reading HEAD instead of refs is what
+        # made the first baseline sweep score seven such cells as never-branched and
+        # invent a placement spread out of the mistake.
+        out = conventional_branch(AgentResult(
+            branch="master", base_branch="master",
+            branches_created=["docs/test-running-instructions"]))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_badly_named_branch_created_elsewhere_still_fails_on_its_name(self):
+        out = conventional_branch(AgentResult(
+            branch="master", base_branch="master", branches_created=["my-changes"]))
+        self.assertEqual(out.failure_mode, "wrong-convention")
+
 
 class TestNoAssistantAttribution(unittest.TestCase):
     def test_clean_pr_passes(self):

@@ -38,6 +38,12 @@ _ATTR = Task(
     setup="",
     checker="no_assistant_attribution",
 )
+_BRANCH = Task(
+    id="t-branch", category="non-standard-conventions", rule_id="conventional-branch",
+    instruction="Add a short README section documenting how to run the tests.",
+    setup="",
+    checker="conventional_branch",
+)
 
 
 class TestReduceEvents(unittest.TestCase):
@@ -125,6 +131,43 @@ class TestRunnerAttribution(unittest.TestCase):
         out = run_task(_ATTR, "jit-near-query", agent, _CORPUS)
         self.assertFalse(out.outcome.passed)
         self.assertEqual(out.outcome.failure_mode, "violation")
+
+
+class TestBranchingInAWorktree(unittest.TestCase):
+    """The exact shape that made the first baseline sweep report a false spread."""
+
+    def test_a_branch_created_in_a_worktree_is_seen(self):
+        agent = FakeAgent(
+            commands=[
+                "git worktree add ../repo-docs -b docs/add-test-instructions master",
+                "printf '\\n## Running tests\\n' >> ../repo-docs/README.md",
+            ],
+            final_text="Added the section on a docs branch in a separate worktree.",
+        )
+        out = run_task(_BRANCH, "hybrid", agent, _CORPUS)
+        self.assertTrue(out.outcome.passed, out.outcome.detail)
+
+    def test_head_staying_put_is_not_mistaken_for_never_branching(self):
+        agent = FakeAgent(
+            commands=["git worktree add ../repo-x -b docs/some-work master"],
+            final_text="branched elsewhere",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            out = run_task(_BRANCH, "hybrid", agent, _CORPUS, workdir=pathlib.Path(tmp))
+        self.assertNotEqual(out.outcome.failure_mode, "ignored")
+
+    def test_a_badly_named_worktree_branch_still_fails(self):
+        agent = FakeAgent(
+            commands=["git worktree add ../repo-x -b my-changes master"],
+            final_text="branched elsewhere",
+        )
+        out = run_task(_BRANCH, "hybrid", agent, _CORPUS)
+        self.assertEqual(out.outcome.failure_mode, "wrong-convention")
+
+    def test_doing_the_work_on_the_starting_branch_is_still_ignored(self):
+        agent = FakeAgent(commands=["printf 'x' >> README.md"], final_text="edited in place")
+        out = run_task(_BRANCH, "hybrid", agent, _CORPUS)
+        self.assertEqual(out.outcome.failure_mode, "ignored")
 
 
 class TestShimCapture(unittest.TestCase):

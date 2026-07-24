@@ -86,31 +86,34 @@ def conventional_commit(result: AgentResult) -> CheckOutcome:
 def conventional_branch(result: AgentResult) -> CheckOutcome:
     """The agent branched before working, and named the branch conventionally.
 
-    Two distinct failures, reported distinctly. Never leaving the branch the cell
-    started on is `ignored`: the rule did not fire at all. Creating a branch whose
-    name breaks the convention is `wrong-convention`: the rule fired and was applied
-    badly. Those call for opposite remedies (make the rule visible vs. make it
-    precise), so collapsing them loses the signal the failure vocabulary exists for.
+    Decided from the refs the agent added, not from where HEAD ended up. An agent
+    that runs `git worktree add ../elsewhere -b docs/x` has branched, and branched
+    correctly, while HEAD in the original directory is still the starting branch.
+    The first baseline sweep read HEAD and scored seven such cells as "never
+    branched"; that error, and nothing else, produced its entire placement spread.
 
-    The earlier version treated "stayed on the default" as a pass via a
-    `branch is None` case that could never be reached, because the trajectory reads
-    `rev-parse HEAD`, which always names a branch. The Opus run therefore reported
-    every miss as `wrong-convention` with no way to tell which had happened.
+    Two distinct failures, reported distinctly. Adding no branch at all is `ignored`:
+    the rule never fired. Adding one whose name breaks the convention is
+    `wrong-convention`: the rule fired and was applied badly. Those call for opposite
+    remedies, make the rule visible versus make it precise, so collapsing them loses
+    the signal the failure vocabulary exists for.
     """
-    if result.branch is None:
-        return CheckOutcome(
-            passed=False, failure_mode="ignored", detail="no branch recorded for the run",
-        )
-    if result.base_branch is not None and result.branch == result.base_branch:
+    created = list(result.branches_created)
+    if not created:
+        # Falls back to HEAD for results built by hand (the checker tests) and for
+        # any adapter that cannot enumerate refs.
+        if result.branch is not None and result.branch != result.base_branch:
+            created = [result.branch]
+    if not created:
         return CheckOutcome(
             passed=False, failure_mode="ignored",
-            detail=f"never left the starting branch: {result.branch!r}",
+            detail="no branch was created for the work",
         )
-    if _CONVENTIONAL_BRANCH.match(result.branch):
+    if any(_CONVENTIONAL_BRANCH.match(name) for name in created):
         return CheckOutcome(passed=True)
     return CheckOutcome(
         passed=False, failure_mode="wrong-convention",
-        detail=f"branch not conventional: {result.branch!r}",
+        detail=f"branch not conventional: {created!r}",
     )
 
 

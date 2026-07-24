@@ -55,20 +55,44 @@ compliance, which is why adherence is scored two ways.
    an `AgentResult`,
 6. run the checker.
 
-The repo is **hermetic**: hooks point at an empty dir, so the operator's global git
-hooks never fire and skew a cell. The shim and its log live **beside** the repo, never
-inside it, or the instrument would be planting the untracked file that a "clean up the
-stray files" task is then scored on. `FakeAgent` is a real test double, not a mock: it
-executes its scripted commands inside the repo, so the pipeline is proven end to end
-with no model call.
+A cell is **hermetic** in three ways, each of which was a leak first:
+
+- git hooks point at an empty dir, so the operator's global hooks never fire and skew
+  a cell;
+- the shim and its log live **beside** the repo, never inside it, or the instrument
+  would be planting the untracked file that a "clean up the stray files" task is then
+  scored on;
+- the agent runs with **its own customizations disabled** (`ClaudeCliAgent.isolate`,
+  which passes `--safe-mode`). By default the CLI loads the operator's global
+  instruction file, so the cell measures those rules competing with the injected
+  corpus rather than the corpus alone. In the first baseline sweep that leaked a
+  standing "always work in a worktree" rule into every arm including the control, and
+  it produced the run's only failure mode.
+
+`FakeAgent` is a real test double, not a mock: it executes its scripted commands
+inside the repo, so the pipeline is proven end to end with no model call.
+
+**The branch checker reads refs, not HEAD.** `git worktree add ../elsewhere -b docs/x`
+is branching, and branching correctly, while HEAD in the original directory stays put.
+Reading HEAD scored seven such cells as "never branched" and invented an entire
+placement spread out of the mistake.
 
 ## The three things that make a result mean something
 
 **The control arm.** `no-rules` composes the instruction with no rule text anywhere. A
 task that passes it is not measuring rule adherence, it is measuring what the model
 does unprompted. `screening.py` turns that into a verdict per task: `admissible`,
-`measures-prior`, or `unreachable-by-text` (fails even with the rule next to the
-query, which is the evidence for gating that rule instead of rewording it).
+`measures-prior`, or `unreachable-by-text` (nothing reaches it, which is the evidence
+for gating that rule instead of rewording it).
+
+The verdict is a **band**, not a hard zero: a task is out if the control already
+passes most of the time, out if no arm gets near it, and admissible in between. That
+mirrors this lab's existing task-selection rule (`AGENTS.md`: a 30-70% pass rate "is a
+precondition, not an optimization"), with the control pass rate standing in for
+difficulty. Requiring the control to fail every rep sounds stricter and is worse: for
+a stochastic agent it discards exactly the middle of the range, where the measurable
+tasks are. For an admissible task the number to read is the **effect**, the gap
+between the best arm and the control, not the arm's absolute pass rate.
 
 **Distance.** `Axes(turns=N, filler_tokens=K)` puts real space between the rule and the
 moment it decides something, within a turn and across turns. Filler is **identical in

@@ -59,6 +59,7 @@ class AgentResult:
     commit_messages: list[str] = field(default_factory=list)
     branch: str | None = None                  # the branch HEAD is on when the agent stops
     base_branch: str | None = None             # the branch the cell started on
+    branches_created: list[str] = field(default_factory=list)  # refs the agent added
     pr_body: str | None = None
     files_read: list[str] = field(default_factory=list)
     reply_language: str | None = None          # ISO code, when the runner detects it
