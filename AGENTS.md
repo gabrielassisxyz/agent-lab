@@ -12,7 +12,7 @@ Run existing benchmarks end to end to understand how they score an agent, then b
 - **The sandbox is part of the instrument.** The agent container has no route to the internet except the LiteLLM proxy (its brain is reachable, its hands are not). Never weaken that: no network in the agent container, prune remotes/future refs from the checkout, or a task can be "resolved" by cheating and it shows up as a scaffold win.
 - **Decontamination is non-negotiable.** Always assert the `created_at` range of the split you run against the target model's training cutoff — running a contaminated split silently compresses the effect being measured. §9 has the mechanics.
 - **Never fabricate a number.** Zeroed costs, `"timeout": true`, SEM/pass@k — the results tables must never contain a value that looks measured but was invented. A fabricated price or a hidden timeout corrupts every downstream conclusion.
-- **`bin/ci` green before any PR.** It runs gitleaks (secret scan), shellcheck (shell lint), and a Python syntax check — the deterministic gates. Run `bin/install-hooks` once after clone.
+- **`bin/ci` green before any PR.** It runs gitleaks (secret scan), shellcheck (shell lint), a Python syntax check, and slop-guard (`--diff` — em-dash/tool-name tells on added lines) — the deterministic gates. Run `bin/install-hooks` once after clone.
 - **Conventional Commits**, branch before non-trivial work, what+why in the message, no external attribution. English in files.
 
 ## Stack
