@@ -36,11 +36,21 @@ def _last(session):
 
 class TestRelevantRules(unittest.TestCase):
     def test_matches_by_category(self):
-        got = {r.id for r in relevant_rules("non-standard-conventions", _CORPUS)}
-        self.assertEqual(got, {"conventional-commits", "conventional-branch"})
+        # Asserted by category rather than by rule id: the corpus is meant to be
+        # replaced (it is an input to the experiment, not part of it), and a test
+        # pinned to the ids of one snapshot fails on every swap without ever having
+        # checked the matcher.
+        got = relevant_rules("non-standard-conventions", _CORPUS)
+        self.assertTrue(got)
+        for rule in got:
+            self.assertEqual(rule.category, "non-standard-conventions")
+
+    def test_every_category_in_the_corpus_is_retrievable(self):
+        for rule in _CORPUS:
+            self.assertIn(rule, relevant_rules(rule.category, _CORPUS))
 
     def test_no_match_is_empty(self):
-        self.assertEqual(relevant_rules("memory-state", _CORPUS), [])
+        self.assertEqual(relevant_rules("no-such-category", _CORPUS), [])
 
 
 class TestCompose(unittest.TestCase):

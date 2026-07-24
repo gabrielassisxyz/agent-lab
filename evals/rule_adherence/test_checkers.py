@@ -15,6 +15,9 @@ import pathlib
 import unittest
 
 from .checkers import (
+    consulted_doc,
+    english_file_content,
+    used_required_tool,
     REGISTRY,
     conventional_branch,
     conventional_commit,
@@ -158,6 +161,109 @@ class TestRegistryAndTasks(unittest.TestCase):
         ]
         for out in samples:
             self.assertIn(out.failure_mode, FAILURE_MODES)
+
+
+
+
+class TestUsedRequiredTool(unittest.TestCase):
+    """The rule is about HOW a file is written, not whether it changed."""
+
+    def test_writing_through_the_tool_passes(self):
+        out = used_required_tool(
+            AgentResult(commands=["./bin/oplog 'ttl raised to 3600'"],
+                        patch="--- a/ops/log.md\n+++ b/ops/log.md\n+ttl raised to 3600\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed, out.detail)
+
+    def test_editing_the_file_directly_is_a_violation(self):
+        out = used_required_tool(
+            AgentResult(commands=["cat ops/log.md"],
+                        patch="--- a/ops/log.md\n+++ b/ops/log.md\n+ttl raised to 3600\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "violation")
+
+    def test_leaving_the_target_alone_is_not_this_rules_failure(self):
+        # An agent that wrote nothing broke some other rule, not this one.
+        out = used_required_tool(AgentResult(patch=""), tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed)
+
+    def test_touching_another_file_does_not_trip_it(self):
+        out = used_required_tool(
+            AgentResult(patch="--- a/README.md\n+++ b/README.md\n+notes\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed)
+
+
+class TestConsultedDoc(unittest.TestCase):
+    def test_reading_the_doc_and_carrying_its_value_passes(self):
+        out = consulted_doc(
+            AgentResult(files_read=["/repo/CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+Release branches use ship/ here.\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_command_naming_the_doc_counts_as_consulting_it(self):
+        out = consulted_doc(
+            AgentResult(commands=["cat CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+ship/\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertTrue(out.passed)
+
+    def test_answering_without_opening_it_is_not_consulted(self):
+        out = consulted_doc(
+            AgentResult(patch="+++ b/ANSWER.md\n+release/\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertEqual(out.failure_mode, "not-consulted")
+
+    def test_opening_it_and_answering_from_general_knowledge_is_surface_compliance(self):
+        # The document states a convention that is deliberately not the common one,
+        # so the common answer is proof the file was opened and ignored.
+        out = consulted_doc(
+            AgentResult(files_read=["CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+They use the release/ prefix.\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "surface-compliance")
+
+
+class TestEnglishFileContent(unittest.TestCase):
+    def test_english_content_passes(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+## Running tests\n+Run pytest from the project root.\n"))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_portuguese_content_fails(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+## Rodando os testes\n"
+                  "+Para rodar os testes, use pytest na raiz do projeto.\n"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "wrong-convention")
+
+    def test_the_diff_header_is_not_scanned_as_content(self):
+        out = english_file_content(AgentResult(patch="+++ b/docs/para-que-serve.md\n+Notes.\n"))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_single_borrowed_word_is_not_a_language(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+The parser handles the 'que' token specially.\n"))
+        self.assertTrue(out.passed)
+
+
+class TestAttributionScansAuthoredFiles(unittest.TestCase):
+    def test_a_signature_in_a_written_pr_body_is_caught(self):
+        # The realistic task is "write the PR body into a file", which the earlier
+        # checker could not see at all.
+        out = no_assistant_attribution(AgentResult(
+            patch="+++ b/PR_BODY.md\n+Raises the cache TTL.\n"
+                  "+\n+Generated with Claude Code\n"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "violation")
+
+    def test_a_clean_written_pr_body_passes(self):
+        out = no_assistant_attribution(AgentResult(
+            patch="+++ b/PR_BODY.md\n+Raises the cache TTL from 900 to 3600 seconds.\n"))
+        self.assertTrue(out.passed)
 
 
 if __name__ == "__main__":

@@ -160,4 +160,5 @@ def _run_in(cell_dir: Path, task: Task, placement: str, agent: Agent, corpus: li
         "branches_created": result.branches_created,
         "final_text": result.final_text,
     }
-    return RunOutcome(outcome=get_checker(task.checker)(result), trace=trace, **common)
+    check = get_checker(task.checker)(result, **task.checker_args)
+    return RunOutcome(outcome=check, trace=trace, **common)
