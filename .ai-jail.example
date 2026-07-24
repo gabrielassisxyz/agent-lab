@@ -1,0 +1,34 @@
+# ai-jail sandbox configuration — EXAMPLE
+# https://github.com/akitaonrails/ai-jail
+#
+# Copy this to `.ai-jail` (git-ignored) and replace the paths with real absolute
+# paths for your machine. The real `.ai-jail` is per-operator config and is never
+# committed — `rw_maps` are absolute paths that exist on exactly one computer.
+#
+# ┌─ READ THIS BEFORE "TIDYING UP" THE DOCKER LINE ────────────────────────────┐
+# │ This repo is a deliberate exception to the usual no-docker rule.           │
+# │                                                                            │
+# │ Normally /var/run/docker.sock is NOT mounted, because the socket is root   │
+# │ ON THE HOST: an agent inside the sandbox can run                           │
+# │   docker run -v /:/host --privileged alpine chroot /host sh                │
+# │ and walk straight out of the jail. It is a door, not a crack.              │
+# │                                                                            │
+# │ Here it is mounted ON PURPOSE: the benchmarks are SWE-bench-based, which    │
+# │ executes every task inside a container. No docker socket, no benchmark.     │
+# │ So `no_docker = false` is a weighed, accepted cost — not an oversight.      │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+#   rw <repos>   Cross-repo work is deliberate; git is the undo for anything under it.
+#   rw <scratch> Scratch that outlives the jail's throwaway tmpfs /tmp.
+#   hide .password-store  ro-bound by default. No business in an agent session.
+
+command = ["claude"]
+rw_maps = [
+    "$HOME/repositories",
+    "$HOME/tmp",
+]
+ro_maps = []
+hide_dotdirs = [".password-store"]
+mask = []
+no_docker = false
+allow_tcp_ports = []

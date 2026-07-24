@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# The deterministic gate for this repo, runnable locally — run it before any PR,
+# so "green locally" == "green in CI". This repo is Python runners + shell sandbox
+# scripts, so the gates are: no secrets, shell lints clean, Python parses.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+fail=0
+
+echo "==> gitleaks (secret scan)"
+if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks git --no-banner --redact . || fail=1
+else
+    echo "gitleaks not installed — see https://github.com/gitleaks/gitleaks" >&2
+    fail=1
+fi
+
+echo "==> shellcheck (shell lint)"
+if command -v shellcheck >/dev/null 2>&1; then
+    # All tracked shell scripts, selected by shebang not path (bin/ may hold tools
+    # in other languages that shellcheck would error on).
+    mapfile -t candidates < <(git ls-files 'bin/*' '.githooks/*' 'evals/**/*.sh')
+    scripts=()
+    for candidate in "${candidates[@]}"; do
+        case "$(head -1 "$candidate")" in
+            '#!'*sh|'#!'*sh\ *) scripts+=("$candidate") ;;
+        esac
+    done
+    if [ ${#scripts[@]} -gt 0 ]; then
+        shellcheck "${scripts[@]}" || fail=1
+    fi
+else
+    echo "shellcheck not installed — skipping (install: https://www.shellcheck.net)" >&2
+fi
+
+echo "==> python syntax (py_compile — a real gate with no extra dependency)"
+mapfile -t pyfiles < <(git ls-files '*.py')
+if [ ${#pyfiles[@]} -gt 0 ]; then
+    python3 -m py_compile "${pyfiles[@]}" || fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo "==> bin/ci FAILED"
+    exit 1
+fi
+echo "==> bin/ci OK"
