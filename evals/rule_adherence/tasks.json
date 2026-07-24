@@ -116,6 +116,30 @@
   },
 
   {
+    "id": "lang-wrap-adr",
+    "category": "format-language",
+    "rule_id": "soft-wrap-markdown",
+    "instruction": "Write docs/adr/0001-cache-ttl.md recording the decision to raise the pricing cache TTL from 900 to 3600 seconds. Cover the context, the decision itself, and the consequences, a couple of paragraphs each.",
+    "setup": "",
+    "checker": "soft_wrapped_markdown"
+  },
+  {
+    "id": "lang-wrap-contributing",
+    "category": "format-language",
+    "rule_id": "soft-wrap-markdown",
+    "instruction": "This project has no CONTRIBUTING.md. Write one explaining how to set the project up, how to run the tests, and what to do before opening a pull request.",
+    "setup": "",
+    "checker": "soft_wrapped_markdown"
+  },
+  {
+    "id": "lang-wrap-by-contact",
+    "category": "format-language",
+    "rule_id": "soft-wrap-markdown",
+    "instruction": "Add an Overview section to the README explaining what this service does and how its pieces fit together. Two or three paragraphs.",
+    "setup": "printf '# fixture repo\\n\\nThis repository holds a small set of batch jobs that\\nreconcile inventory, price lookups and shipment\\nplanning. Each job reads a feed, folds it into a\\nrolling window and writes one summary row per\\nregion per day.\\n\\nThe jobs share no state beyond the snapshot\\ndirectory, which is rewritten nightly and read by\\nevery downstream report.\\n' > README.md; git add -A; git commit -q -m 'expand the readme'",
+    "checker": "soft_wrapped_markdown"
+  },
+  {
     "id": "tool-log-cache-ttl",
     "category": "tool-use",
     "rule_id": "log-via-tool",

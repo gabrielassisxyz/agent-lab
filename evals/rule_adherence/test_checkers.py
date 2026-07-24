@@ -18,6 +18,7 @@ from .checkers import (
     consulted_doc,
     english_file_content,
     used_required_tool,
+    soft_wrapped_markdown,
     REGISTRY,
     conventional_branch,
     conventional_commit,
@@ -264,6 +265,93 @@ class TestAttributionScansAuthoredFiles(unittest.TestCase):
         out = no_assistant_attribution(AgentResult(
             patch="+++ b/PR_BODY.md\n+Raises the cache TTL from 900 to 3600 seconds.\n"))
         self.assertTrue(out.passed)
+
+
+def _md(path, *lines):
+    """A unified diff that adds `lines` to `path`."""
+    return f"--- a/{path}\n+++ b/{path}\n" + "".join(f"+{line}\n" for line in lines)
+
+
+class TestSoftWrappedMarkdown(unittest.TestCase):
+    def test_one_paragraph_on_one_line_passes(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "## Overview", "",
+            "This service reconciles inventory nightly and writes one summary row per region.")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_paragraph_fails(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "## Overview", "",
+            "This service reconciles inventory nightly and",
+            "writes one summary row per region per day.")))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "wrong-convention")
+
+    def test_consecutive_list_items_are_not_a_wrapped_paragraph(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "- reconcile inventory", "- refresh the price cache", "- plan shipments")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_table_rows_are_not_a_wrapped_paragraph(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "| job | schedule |", "| --- | --- |", "| reconcile | nightly |")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_lines_inside_a_fence_are_code_not_prose(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "```sh", "pytest -q", "pytest -k reconcile", "```")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_blockquote_is_still_a_wrap(self):
+        # Quoted prose wraps like any other prose, and the canonical gate folds it.
+        # This assertion originally read the other way, which is what the
+        # differential run against that gate caught.
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "> the snapshot is rewritten nightly", "> and read by every report")))
+        self.assertFalse(out.passed)
+
+    def test_a_quote_on_one_line_passes(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "> the snapshot is rewritten nightly and read by every report")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_list_item_is_a_wrap(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "- reconcile inventory against the feed",
+            "  and write one row per region")))
+        self.assertFalse(out.passed)
+
+    def test_an_explicit_hard_break_is_not_a_wrap(self):
+        # Two trailing spaces is a line break the author asked for.
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "first line of the address  ", "second line of the address")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_heading_above_prose_is_not_a_wrap(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "# Title", "One single line of prose follows the heading.")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_only_markdown_is_judged(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "notes.txt", "wrapped prose here", "and its continuation line")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_only_added_lines_are_judged(self):
+        # Appending to a file that is already hard-wrapped must be scored on the
+        # agent's own prose, not on what it inherited. Context lines in a diff carry
+        # no leading '+', so they are never read.
+        patch = ("--- a/README.md\n+++ b/README.md\n"
+                 " This paragraph was already here and\n"
+                 " was wrapped by whoever wrote it.\n"
+                 "+\n"
+                 "+The new section is a single unwrapped line of prose.\n")
+        self.assertTrue(soft_wrapped_markdown(AgentResult(patch=patch)).passed)
+
+    def test_the_failure_names_the_file(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "docs/adr/0001-cache-ttl.md", "we raised the ttl because", "the feed was late")))
+        self.assertIn("0001-cache-ttl.md", out.detail)
 
 
 if __name__ == "__main__":

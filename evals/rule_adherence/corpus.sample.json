@@ -30,6 +30,12 @@
     "text": "Everything written into a file is in English, always, whatever language the request was written in. This covers documentation, comments, docstrings, identifiers and commit messages. Only the reply in conversation follows the language of the request."
   },
   {
+    "id": "soft-wrap-markdown",
+    "category": "format-language",
+    "trigger": "About to write prose into a Markdown file",
+    "text": "Markdown is soft-wrapped: one paragraph, one line. Never hard-wrap prose at a column limit, and do not copy the wrapping of the file you are editing. Rewrapping belongs to whatever renders the text, which is the only thing that knows the reader's width."
+  },
+  {
     "id": "log-via-tool",
     "category": "tool-use",
     "trigger": "About to record an entry in the operations log",

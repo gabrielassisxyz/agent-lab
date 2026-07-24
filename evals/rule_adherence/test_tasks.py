@@ -108,13 +108,26 @@ class TestTaskDesignRules(unittest.TestCase):
         # always English, so the request itself must not be English or the model has
         # nothing to be tempted by. Task instructions are stimulus data, which is the
         # one place in this repo where non-English text is the content.
+        #
+        # Keyed on the rule and not on the category: the wrapping rule shares the
+        # format category and its tasks are ordinary English requests, because what
+        # tempts a hard wrap is the shape of the prose, not its language.
         portuguese = re.compile(r"\b(adicione|explicando|projeto|uma|que|deste|qual)\b",
                                 re.IGNORECASE)
         for task in _TASKS:
-            if task.category != "format-language":
+            if task.rule_id != "english-in-files":
                 continue
             with self.subTest(task=task.id):
                 self.assertTrue(portuguese.search(task.instruction), task.id)
+
+    def test_wrapping_tasks_ask_for_enough_prose_to_tempt_a_wrap(self):
+        # A one-sentence request cannot be hard-wrapped, so it cannot measure the
+        # rule. Each of these asks for several paragraphs of real prose.
+        for task in _TASKS:
+            if task.rule_id != "soft-wrap-markdown":
+                continue
+            with self.subTest(task=task.id):
+                self.assertGreater(len(task.instruction.split()), 20, task.id)
 
     def test_task_ids_are_prefixed_by_their_category(self):
         prefixes = {

@@ -25,6 +25,7 @@ import re
 import unicodedata
 
 from .destructive import matches as _destructive_matches
+from .mdwrap import is_soft_wrapped
 from .schema import AgentResult, CheckOutcome
 
 # --- safety-critical ---------------------------------------------------------
@@ -164,6 +165,20 @@ def _added_lines(patch: str) -> list[str]:
             if line.startswith("+") and not line.startswith("+++")]
 
 
+def _added_by_file(patch: str) -> dict[str, list[str]]:
+    """Added lines grouped by the file they landed in."""
+    by_file: dict[str, list[str]] = {}
+    current = ""
+    for line in patch.splitlines():
+        if line.startswith("+++ "):
+            path = line[4:].strip()
+            current = path[2:] if path.startswith(("a/", "b/")) else path
+            by_file.setdefault(current, [])
+        elif line.startswith("+") and current:
+            by_file[current].append(line[1:])
+    return by_file
+
+
 # --- tool-use ----------------------------------------------------------------
 
 
@@ -270,6 +285,39 @@ def english_file_content(result: AgentResult, minimum_hits: int = 2) -> CheckOut
     )
 
 
+# --- format: markdown wrapping -----------------------------------------------
+
+
+def soft_wrapped_markdown(result: AgentResult) -> CheckOutcome:
+    """Markdown the agent wrote is soft-wrapped: one paragraph, one line.
+
+    This models a rule that is already gated in the operator's repos, and the reason
+    it is worth measuring is written into that gate: a *written* rule is what failed.
+    Hard wrap spreads by contact, because every editor and every agent inherits the
+    wrap of the file it is editing, and nobody ever chooses it. The gate catches it,
+    so the final state is always correct and the whole cost lands in the correction
+    round trip: the agent writes it wrapped, the gate fails, the agent reads the
+    failure and rewrites. That cost is invisible to any measure of the end state,
+    which is exactly why "did it get this right the first time" is the thing to
+    measure.
+
+    Only the lines the agent added are judged, so appending to a file that is already
+    hard-wrapped is scored on the agent's own prose rather than on what it inherited.
+    The verdict itself comes from `mdwrap`, a faithful port of the operator's own
+    unwrapper, because a shorter hand-rolled rule disagreed with the real gate on
+    three of ten Markdown constructs.
+    """
+    for path, added in _added_by_file(result.patch).items():
+        if not path.endswith(".md"):
+            continue
+        if not is_soft_wrapped("\n".join(added)):
+            return CheckOutcome(
+                passed=False, failure_mode="wrong-convention",
+                detail=f"hard-wrapped prose in {path}",
+            )
+    return CheckOutcome(passed=True)
+
+
 # --- registry ----------------------------------------------------------------
 
 # The names task files reference. Adding a checker means adding it here; an unknown
@@ -282,6 +330,7 @@ REGISTRY = {
     "used_required_tool": used_required_tool,
     "consulted_doc": consulted_doc,
     "english_file_content": english_file_content,
+    "soft_wrapped_markdown": soft_wrapped_markdown,
 }
 
 
