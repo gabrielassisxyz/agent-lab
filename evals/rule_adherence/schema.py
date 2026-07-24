@@ -20,6 +20,32 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Token accounting for one cell.
+
+    The design asks for cost as a first-class axis (it is half of the AGENTS.md
+    "costs or saves" question, and the whole of "which configuration is the cheapest
+    that still holds adherence"). Every field is read from the agent CLI's own
+    report, never estimated, so a missing report stays zero rather than becoming a
+    fabricated number.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+    def __add__(self, other: "Usage") -> "Usage":
+        """Usage accumulates across the turns of one session."""
+        return Usage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+        )
+
+
+@dataclass(frozen=True)
 class AgentResult:
     """What an agent did on one task, reduced to the facts a checker can decide on.
 
@@ -31,11 +57,13 @@ class AgentResult:
     final_text: str = ""                       # the agent's closing message
     commands: list[str] = field(default_factory=list)   # shell commands it ran, in order
     commit_messages: list[str] = field(default_factory=list)
-    branch: str | None = None                  # the branch it committed on, if any
+    branch: str | None = None                  # the branch HEAD is on when the agent stops
+    base_branch: str | None = None             # the branch the cell started on
     pr_body: str | None = None
     files_read: list[str] = field(default_factory=list)
     reply_language: str | None = None          # ISO code, when the runner detects it
     patch: str = ""                            # git diff of the agent's changes since base
+    usage: Usage = field(default_factory=Usage)
 
 
 @dataclass(frozen=True)

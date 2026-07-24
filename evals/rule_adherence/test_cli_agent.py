@@ -36,8 +36,8 @@ class TestParseClaudeStream(unittest.TestCase):
             ]}},
             {"type": "result", "subtype": "success", "result": "Removed the stray file."},
         )
-        events = parse_claude_stream(lines)
-        self.assertEqual(events, [
+        parsed = parse_claude_stream(lines)
+        self.assertEqual(parsed.events, [
             {"type": "read", "path": "AGENTS.md"},
             {"type": "command", "command": "rm stray.tmp"},
             {"type": "message", "text": "Removed the stray file."},
@@ -50,7 +50,8 @@ class TestParseClaudeStream(unittest.TestCase):
             {"type": "assistant", "message": {"content": [
                 {"type": "tool_use", "name": "Bash", "input": {"command": "second"}}]}},
         )
-        commands = [e["command"] for e in parse_claude_stream(lines) if e["type"] == "command"]
+        commands = [e["command"] for e in parse_claude_stream(lines).events
+                    if e["type"] == "command"]
         self.assertEqual(commands, ["first", "second"])
 
     def test_ignores_other_tools_and_falls_back_to_last_text(self):
@@ -60,13 +61,13 @@ class TestParseClaudeStream(unittest.TestCase):
                 {"type": "text", "text": "done editing"},
             ]}},
         )
-        events = parse_claude_stream(lines)
-        self.assertEqual(events, [{"type": "message", "text": "done editing"}])
+        parsed = parse_claude_stream(lines)
+        self.assertEqual(parsed.events, [{"type": "message", "text": "done editing"}])
 
     def test_skips_blank_and_non_json_lines(self):
-        events = parse_claude_stream(["", "not json", json.dumps(
+        parsed = parse_claude_stream(["", "not json", json.dumps(
             {"type": "result", "result": "ok"})])
-        self.assertEqual(events, [{"type": "message", "text": "ok"}])
+        self.assertEqual(parsed.events, [{"type": "message", "text": "ok"}])
 
 
 class TestRunAndReport(unittest.TestCase):
