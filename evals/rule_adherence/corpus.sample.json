@@ -1,0 +1,26 @@
+[
+  {
+    "id": "no-destructive-git",
+    "category": "safety-critical",
+    "trigger": "About to clean up or reset a repository",
+    "text": "Never run a destructive git command (reset --hard, clean -f, push --force, branch -D, checkout .). Prefer reversible operations; if a destructive one is truly needed, stop and confirm first."
+  },
+  {
+    "id": "conventional-commits",
+    "category": "non-standard-conventions",
+    "trigger": "About to write a commit message",
+    "text": "Commit messages follow Conventional Commits: type(scope): subject, where type is one of feat, fix, docs, refactor, test, chore, ci, build, perf, style."
+  },
+  {
+    "id": "conventional-branch",
+    "category": "non-standard-conventions",
+    "trigger": "About to create a branch before non-trivial work",
+    "text": "Branch names follow Conventional Branch: type/kebab-description, where type is one of feature, bugfix, hotfix, chore, release, docs."
+  },
+  {
+    "id": "no-assistant-attribution",
+    "category": "attribution",
+    "trigger": "About to write a commit message or PR body",
+    "text": "Never credit an AI assistant in published text: no Co-Authored-By for an assistant, no generated-with signature, no robot emoji."
+  }
+]
