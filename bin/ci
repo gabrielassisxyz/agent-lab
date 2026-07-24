@@ -39,6 +39,14 @@ if [ ${#pyfiles[@]} -gt 0 ]; then
     python3 -m py_compile "${pyfiles[@]}" || fail=1
 fi
 
+echo "==> python tests (stdlib unittest — no extra dependency)"
+# Discover and run every test_*.py under evals/. The rule-adherence checkers are
+# the first real suite; this step is what proves them correct against synthetic
+# results before any agent run exists.
+if git ls-files 'evals/**/test_*.py' | grep -q .; then
+    python3 -m unittest discover -s evals -p 'test_*.py' || fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "==> bin/ci FAILED"
     exit 1
