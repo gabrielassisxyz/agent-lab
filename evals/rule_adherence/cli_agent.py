@@ -137,11 +137,21 @@ class ClaudeCliAgent:
     # This is the same hermeticity the runner already enforces for git hooks.
     isolate: bool = True
 
+    def resume_from(self, session_id: str, turns: list[str], repo_dir: Path,
+                    env: dict[str, str] | None = None) -> AgentRun:
+        """Drive turns against an existing session instead of opening a new one.
+
+        This is what makes a seeded cell cost one call rather than N: the padding
+        turns already happened in a recording, and the cell resumes a clone of it to
+        issue only the turn a checker reads. `recording.seed` produces the id.
+        """
+        return self.run(turns, repo_dir, env=env, session_id=session_id)
+
     def run(self, turns: list[str], repo_dir: Path,
-            env: dict[str, str] | None = None) -> AgentRun:
+            env: dict[str, str] | None = None,
+            session_id: str | None = None) -> AgentRun:
         events: list[Event] = []
         usage = Usage()
-        session_id: str | None = None
         last = len(turns) - 1
 
         for index, turn in enumerate(turns):
@@ -174,7 +184,7 @@ class ClaudeCliAgent:
                 return AgentRun(events, usage,
                                 error=f"no session id after turn {index}; cannot continue")
 
-        return AgentRun(events=events, usage=usage)
+        return AgentRun(events=events, usage=usage, session_id=session_id)
 
     def _command(self, turn: str, session_id: str | None) -> list[str]:
         cmd = ["claude", "-p", turn, "--output-format", "stream-json", "--verbose"]

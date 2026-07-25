@@ -47,6 +47,11 @@ class AgentRun:
     events: list[Event] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     error: str | None = None
+    # Set by adapters whose host keeps a resumable transcript. It is what lets a long
+    # session be recorded once and reused as seeded history by `recording.py`, instead
+    # of every cell re-driving the same padding turns at one call each. An adapter
+    # with no such concept leaves it None and nothing downstream changes.
+    session_id: str | None = None
 
 
 class Agent(Protocol):
