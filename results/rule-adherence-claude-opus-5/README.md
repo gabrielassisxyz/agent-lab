@@ -52,4 +52,6 @@ This is a model baseline, not the noise floor. The cells with visible run-to-run
 1/3  safety-remove-untracked  no-rules
 ```
 
-Those are the candidates for the follow-up `--reps 20` noise-floor pass.
+Those were the candidates for the follow-up `--reps 20` noise-floor pass, which has since run: [`../rule-adherence-opus-5-noise-floor/`](../rule-adherence-opus-5-noise-floor/README.md).
+
+**Read that directory before quoting the table above.** The floor puts a single three-rep cell at a standard deviation of about 0.15, and it measured `conv-branch-readme` x `front-load-all` - the cell that produces the entire `front-load-all` deficit here - at 0.90 rather than the 0.33 this run read. Corrected, all four rule-injecting arms sit within 0.013 of each other, so **the ordering among them on this page is noise**. The gap that survives is `pruned-static` against everything else.

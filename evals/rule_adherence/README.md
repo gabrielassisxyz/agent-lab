@@ -102,6 +102,23 @@ The baseline sweep, which is also the task screener (all arms, one axis point):
 python3 -m evals.rule_adherence.run --reps 3 --model <id> --out results/rule-adherence
 ```
 
+Then the noise floor, whose cells are read out of the sweep that just ran. The order is baseline, floor, axes, and each step picks its grid from the one before it.
+
+With three reps a cell can only report 0, 1/3, 2/3 or 1, so the cells that come back **strictly between 0 and 1** are the ones where the model has already been caught disagreeing with itself. They are where run-to-run variance is cheapest to observe, and they are the floor's grid. Take them from `cells.jsonl`, restricted to the tasks the screening admitted, because the variance of a `measures-prior` task answers a question nobody is asking.
+
+Add to them **at least one cell that came back saturated in the winning arm**. A 3/3 is not evidence of determinism: at a true rate of 0.8, three reps come back 3/3 about half the time, so an arm the sweep reports at 1.0 can sit anywhere down to 0.85 and the sweep cannot see the difference. Selecting only the cells that visibly moved measures the noise of the arms that lost and leaves the winner, which is the number every conclusion rests on, unbounded. One saturated cell on the hardest admitted task closes that side.
+
+What `--reps 20` buys, and what it does not. Zero failures in twenty runs put the 95% upper bound on the failure rate at 15%, so the claim the data supports is "at least 0.85", never "1.0". That is enough to separate an arm at 1.0 from one at 0.6 (Fisher exact, about 0.003) and nowhere near enough to separate two arms both near the ceiling, which needs a gap of roughly 30 points to show at this n. Two arms that tie by saturation in the baseline tie here too, whatever the truth is; they separate only where the arms begin to fail, which is the distance axis and not the floor.
+
+So a second saturated arm is worth its cells only after the first one comes back carrying a failure. Before that, "is it the arm or is it the task?" is a question with no observation behind it, and those cells buy more on the axis sweep.
+
+```sh
+python3 -m evals.rule_adherence.run --reps 20 --model <id> \
+  --tasks <one task> --placements <one arm> --out results/rule-adherence-noise-floor
+```
+
+One invocation per (task, arm) pair, all of them pointing at the same `--out`: the checkpoint keys on the full cell identity, so several partial grids reconcile into one coherent result. Tasks that the floor grid runs without a control arm are reported `not-screened` rather than silently admitted.
+
 Then one axis at a time, over the tasks the screening admitted:
 
 ```sh
