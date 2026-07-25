@@ -97,6 +97,48 @@ python3 -m evals.rule_adherence.run --reps 3 --model <id> \
 
 `PiCliAgent`, `CodexAgent`, `AgyAgent`. The protocol is ready and fixtures exist, but a second harness is only worth its cost once there is a signal for one model to compare against. Do not start here.
 
+### Running a second model: the baseline is not skippable
+
+The design asks for at least two model families, and the tempting shortcut is to reuse the screening above and go straight to a noise floor on the new model. That does not work, for two independent reasons.
+
+**The screening is a property of the model, not of the task.** `screening.py` decides admissibility from the control arm *of the same run*, which is to say from what that model does with no rule in context at all. The ten admissible tasks are Haiku's ten. A stronger model tends to push *more* tasks into `measures-prior`, not fewer, because it does more unprompted: the earlier Opus run, on the old six-task set, passed five of six tasks in every arm. The four cells that varied are Haiku's four for the same reason.
+
+**A noise floor is a ruler, not a result.** It only means something held up against an effect. Without a baseline for that model there is nothing to hold it against.
+
+So the order, for Opus or any second model:
+
+1. **Baseline, 180 cells.** The ten tasks Haiku admitted, all six arms, `--reps 3`. This produces that model's own screening *and* its effects.
+
+   ```sh
+   python3 -m evals.rule_adherence.run --reps 3 --model <id> \
+     --tasks attr-commit-message,conv-branch-gitignore,conv-branch-readme,conv-commit-fix,conv-commit-version,lang-readme-section,safety-delete-unmerged-branch,safety-drop-local-commits,safety-remove-untracked,tool-log-backup-window \
+     --out results/rule-adherence-<model>
+   ```
+
+2. **Read which cells landed strictly between 0 and 1.** Those are the noise-floor candidates; a cell at 0/3 or 3/3 has no visible variance to measure.
+
+   ```sh
+   RUN=results/rule-adherence-<model> python3 - <<'PY'
+   import json, collections, os
+   run = os.environ["RUN"]
+   adm = set(json.load(open(f"{run}/results.json"))["admissible_tasks"])
+   rate = collections.defaultdict(list)
+   for line in open(f"{run}/cells.jsonl"):
+       c = json.loads(line)
+       if c["task"] in adm:
+           rate[(c["task"], c["placement"])].append(bool(c["passed"]))
+   for (t, p), v in sorted(rate.items()):
+       if 0 < sum(v) < len(v):
+           print(f"{sum(v)}/{len(v)}  {t}  {p}")
+   PY
+   ```
+
+3. **Noise floor on those cells**, `--reps 20`, as in step 1 above.
+
+**Why 180 cells and not the full 378.** A task the weaker model already passes unprompted is one a stronger model will almost certainly also pass, so dropping the eleven `measures-prior` tasks saves half the grid and the filter runs in the safe direction. The caveat is that "almost certainly" is not "certainly": a different default on one convention could make a task the weaker model knew unprompted fail on the stronger one, and that task would be invisible because it was never run. If a second model's result comes back suspiciously narrow, the cheap tie-breaker is the other eleven tasks under the control arm alone (33 cells), which says whether any of them opened headroom.
+
+**The model id is not currently recorded in a run's own data**, only in the results README written by hand. Two runs of different models are told apart by their `--out` directory, so name it after the model.
+
 ### Deferred on purpose
 
 **English sibling tasks for `instruction_language`.** The field is declared in the schema and verified in both directions, but every task is currently pt-BR, so the axis has one level and cannot be measured. Adding an English twin per task makes it a real factor. Settled as later, not dropped: it widens the grid, and the grid is already the expensive part.
