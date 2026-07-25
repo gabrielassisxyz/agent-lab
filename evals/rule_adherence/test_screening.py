@@ -13,7 +13,8 @@ import unittest
 from .placements import CONTROL
 from .runner import RunOutcome
 from .schema import CheckOutcome
-from .screening import ADMISSIBLE, MEASURES_PRIOR, UNREACHABLE, admissible_ids, screen
+from .screening import (ADMISSIBLE, MEASURES_PRIOR, NOT_SCREENED, UNREACHABLE,
+                        admissible_ids, screen)
 
 
 def _run(task, placement, passed, error=None):
@@ -89,7 +90,34 @@ class TestVerdicts(unittest.TestCase):
         self.assertAlmostEqual(found.effect, 0.5)
 
     def test_a_sweep_without_a_control_arm_says_so(self):
-        self.assertEqual(_verdict([_run("t", "hybrid", True)], "t"), "not-screened")
+        self.assertEqual(_verdict([_run("t", "hybrid", True)], "t"), NOT_SCREENED)
+
+    def test_a_control_only_grid_is_not_screened_rather_than_unreachable(self):
+        # What a noise-floor pass looks like: one cell, many reps, no arm under test.
+        # With no arm the best rate is 0.0, which sits below the arm floor, so the
+        # naive reading calls it unreachable-by-text - the claim that no placement of
+        # prose reaches the task, from a grid that tried none. The real run this
+        # guards was exactly this shape and the baseline showed every arm reaching
+        # the same task at 1.0.
+        outcomes = [_run("t", CONTROL, False) for _ in range(19)] + [_run("t", CONTROL, True)]
+        self.assertEqual(_verdict(outcomes, "t"), NOT_SCREENED)
+
+    def test_a_control_only_grid_can_still_show_the_prior(self):
+        # measures-prior is decidable from the control alone, so withholding it here
+        # would discard a verdict the grid genuinely supports - and a floor pass
+        # measures the control far better than three reps ever did.
+        outcomes = [_run("t", CONTROL, True) for _ in range(19)] + [_run("t", CONTROL, False)]
+        self.assertEqual(_verdict(outcomes, "t"), MEASURES_PRIOR)
+
+    def test_arms_that_all_fail_are_still_unreachable(self):
+        # The guard above must not swallow the real unreachable case: here an arm did
+        # run, and reaching for it found nothing.
+        outcomes = [
+            _run("t", CONTROL, False),
+            _run("t", "hybrid", False),
+            _run("t", "jit-near-query", False),
+        ]
+        self.assertEqual(_verdict(outcomes, "t"), UNREACHABLE)
 
 
 class TestDetails(unittest.TestCase):

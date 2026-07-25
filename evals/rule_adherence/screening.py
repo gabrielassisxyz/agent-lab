@@ -19,6 +19,12 @@ separate expense. Three verdicts:
 - **unreachable-by-text** - no arm gets near it. No placement of prose fixes it,
   which is precisely the evidence for putting that rule behind a deterministic gate
   instead of writing it more loudly.
+- **not-screened** - the grid cannot answer the question, because the control arm or
+  every arm under test is missing from it. A verdict is withheld rather than guessed,
+  in both directions: a grid with no control cannot tell adherence from prior, and a
+  control-only grid (which is what a noise-floor pass usually is) has tested no
+  placement at all. Reporting the second as `unreachable-by-text` states the exact
+  opposite of the truth, and states it in the shape of a measurement.
 
 **Why a band and not a hard zero.** The strict reading ("admissible only if the
 control never passes") is cleaner to state, and it is the wrong instrument for a
@@ -48,6 +54,7 @@ from .runner import RunOutcome
 ADMISSIBLE = "admissible"
 MEASURES_PRIOR = "measures-prior"
 UNREACHABLE = "unreachable-by-text"
+NOT_SCREENED = "not-screened"
 
 # The band, mirroring this lab's existing task-selection rule. Above the ceiling the
 # model needs no rule; below the floor no placement reaches the task.
@@ -90,7 +97,7 @@ def screen(outcomes: list[RunOutcome]) -> list[TaskScreen]:
         best_arm, best_rate = _best_arm(runs)
         screens.append(TaskScreen(
             task_id=task_id,
-            verdict=_verdict(control, control_rate, best_rate),
+            verdict=_verdict(control, control_rate, best_arm, best_rate),
             control_n=len(control),
             control_pass_rate=control_rate,
             best_arm=best_arm,
@@ -99,13 +106,22 @@ def screen(outcomes: list[RunOutcome]) -> list[TaskScreen]:
     return screens
 
 
-def _verdict(control: list[RunOutcome], control_rate: float, best_rate: float) -> str:
+def _verdict(control: list[RunOutcome], control_rate: float,
+             best_arm: str | None, best_rate: float) -> str:
     if not control:
         # Without a control arm the question cannot be answered, and guessing an
         # answer here is how an unscreened task set gets treated as a screened one.
-        return "not-screened"
+        return NOT_SCREENED
     if control_rate > CONTROL_CEILING:
+        # Decidable from the control alone: it is a statement about the model's
+        # prior, so a control-only grid answers it and answers it well.
         return MEASURES_PRIOR
+    if best_arm is None:
+        # No arm ran, so "no placement of prose reaches this" was never tested. A
+        # noise-floor grid re-runs one cell at high reps and is often control-only;
+        # reporting that as unreachable-by-text inverts the finding, and the
+        # inversion is invisible because the verdict looks like a measurement.
+        return NOT_SCREENED
     if best_rate < ARM_FLOOR:
         return UNREACHABLE
     return ADMISSIBLE

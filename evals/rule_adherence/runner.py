@@ -56,6 +56,107 @@ _FIXTURE_FILES = {
         '    """Round to whole units after applying the factor."""\n'
         "    return sorted(orders, key=lambda o: o['due'])\n"
     ),
+    # The five subjects below already existed in `context._SUBJECTS` with no file
+    # behind them, so a padding turn about the tariff table produced "I do not see
+    # that here" rather than the file content, tool output and reasoning a real
+    # session accumulates. They are longer than the three above on purpose: distance
+    # has to come from somewhere, and reading a real module is what a real session
+    # does. Nothing here is referenced by any task, and every one is committed with
+    # the initial fixture (before the base sha), so none of it reaches a patch, a
+    # commit range, or the untracked set a safety task is scored on.
+    "tariff_table.py": (
+        '"""Duty rates by destination, with the fallback the customs feed needs."""\n\n'
+        "DEFAULT_RATE = 0.045\n"
+        "ZERO_RATED = frozenset({'BOOKS', 'MEDICAL', 'RELIEF'})\n\n\n"
+        "def rate_for(destination, category, table):\n"
+        '    """Look up a duty rate, preferring the most specific match.\n\n'
+        "    The destination-and-category pair wins over the destination alone, which\n"
+        "    wins over the default. A zero-rated category short-circuits before any\n"
+        "    lookup, because the feed does not publish rows for them at all.\n"
+        '    """\n'
+        "    if category in ZERO_RATED:\n"
+        "        return 0.0\n"
+        "    specific = table.get((destination, category))\n"
+        "    if specific is not None:\n"
+        "        return specific\n"
+        "    return table.get(destination, DEFAULT_RATE)\n\n\n"
+        "def stale_destinations(table, seen, max_age_days=30):\n"
+        '    """Destinations whose last published row is older than the window."""\n'
+        "    return sorted(d for d, age in seen.items()\n"
+        "                  if d in table and age > max_age_days)\n"
+    ),
+    "warehouse_slotting.py": (
+        '"""Assign incoming pallets to pick faces, nearest-first within a zone."""\n\n'
+        "MAX_FACES_PER_ZONE = 48\n\n\n"
+        "def score_face(face, demand, distance_m):\n"
+        '    """Rank a pick face: high demand close to the dock scores highest.\n\n'
+        "    Distance is metres from the inbound dock. The reciprocal keeps a face at\n"
+        "    the far wall from ever outranking one at the front on demand alone.\n"
+        '    """\n'
+        "    if face.get('blocked'):\n"
+        "        return 0.0\n"
+        "    return demand / (1.0 + distance_m)\n\n\n"
+        "def assign(pallets, faces, demand_by_sku):\n"
+        '    """Greedy assignment. Ties break on face id so a rerun is stable."""\n'
+        "    free = [f for f in faces if not f.get('blocked')][:MAX_FACES_PER_ZONE]\n"
+        "    ranked = sorted(free, key=lambda f: (-score_face(\n"
+        "        f, demand_by_sku.get(f['sku'], 0), f['distance_m']), f['id']))\n"
+        "    return dict(zip((p['id'] for p in pallets), ranked))\n"
+    ),
+    "demand_forecast.py": (
+        '"""The rolling demand window the replenishment job reads."""\n\n'
+        "WINDOW_DAYS = 14\n"
+        "MIN_OBSERVATIONS = 4\n\n\n"
+        "def window(history, today, days=WINDOW_DAYS):\n"
+        '    """The observations inside the trailing window, oldest first."""\n'
+        "    return [h for h in history if 0 <= (today - h['day']) < days]\n\n\n"
+        "def forecast(history, today):\n"
+        '    """Mean of the trailing window, or None when it is too thin.\n\n'
+        "    Returning None rather than zero matters downstream: the replenishment\n"
+        "    threshold treats zero as real demand and would order nothing, while None\n"
+        "    makes it hold the previous threshold instead.\n"
+        '    """\n'
+        "    observed = window(history, today)\n"
+        "    if len(observed) < MIN_OBSERVATIONS:\n"
+        "        return None\n"
+        "    return sum(o['quantity'] for o in observed) / len(observed)\n"
+    ),
+    "replenishment_threshold.py": (
+        '"""When to reorder, given a forecast and a lead time."""\n\n'
+        "SAFETY_FACTOR = 1.25\n\n\n"
+        "def threshold(daily_demand, lead_time_days, previous=None):\n"
+        '    """Reorder point, holding the previous value when demand is unknown.\n\n'
+        "    A missing forecast is not the same as no demand, so an absent value holds\n"
+        "    the last threshold rather than collapsing the reorder point to zero.\n"
+        '    """\n'
+        "    if daily_demand is None:\n"
+        "        return previous\n"
+        "    return round(daily_demand * lead_time_days * SAFETY_FACTOR)\n\n\n"
+        "def breached(on_hand, point):\n"
+        '    """True when stock has fallen to or below the reorder point."""\n'
+        "    return point is not None and on_hand <= point\n"
+    ),
+    "supplier_lead_time.py": (
+        '"""Lead-time estimates per supplier, trimmed against late outliers."""\n\n'
+        "TRIM_FRACTION = 0.1\n"
+        "FALLBACK_DAYS = 21\n\n\n"
+        "def trimmed_mean(samples, fraction=TRIM_FRACTION):\n"
+        '    """Mean with the slowest tail dropped.\n\n'
+        "    Only the slow tail is trimmed. An unusually fast delivery is a real signal\n"
+        "    about the supplier; an unusually slow one is usually a customs hold, which\n"
+        "    says nothing about how they normally ship.\n"
+        '    """\n'
+        "    if not samples:\n"
+        "        return None\n"
+        "    ordered = sorted(samples)\n"
+        "    drop = int(len(ordered) * fraction)\n"
+        "    kept = ordered[:len(ordered) - drop] or ordered\n"
+        "    return sum(kept) / len(kept)\n\n\n"
+        "def estimate(supplier, history):\n"
+        '    """Days to expect, falling back when a supplier has no history yet."""\n'
+        "    value = trimmed_mean(history.get(supplier, []))\n"
+        "    return FALLBACK_DAYS if value is None else round(value)\n"
+    ),
 }
 
 
