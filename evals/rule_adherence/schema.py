@@ -20,6 +20,32 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Token accounting for one cell.
+
+    The design asks for cost as a first-class axis (it is half of the AGENTS.md
+    "costs or saves" question, and the whole of "which configuration is the cheapest
+    that still holds adherence"). Every field is read from the agent CLI's own
+    report, never estimated, so a missing report stays zero rather than becoming a
+    fabricated number.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+    def __add__(self, other: "Usage") -> "Usage":
+        """Usage accumulates across the turns of one session."""
+        return Usage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+        )
+
+
+@dataclass(frozen=True)
 class AgentResult:
     """What an agent did on one task, reduced to the facts a checker can decide on.
 
@@ -31,11 +57,14 @@ class AgentResult:
     final_text: str = ""                       # the agent's closing message
     commands: list[str] = field(default_factory=list)   # shell commands it ran, in order
     commit_messages: list[str] = field(default_factory=list)
-    branch: str | None = None                  # the branch it committed on, if any
+    branch: str | None = None                  # the branch HEAD is on when the agent stops
+    base_branch: str | None = None             # the branch the cell started on
+    branches_created: list[str] = field(default_factory=list)  # refs the agent added
     pr_body: str | None = None
     files_read: list[str] = field(default_factory=list)
     reply_language: str | None = None          # ISO code, when the runner detects it
     patch: str = ""                            # git diff of the agent's changes since base
+    usage: Usage = field(default_factory=Usage)
 
 
 @dataclass(frozen=True)
@@ -59,12 +88,26 @@ FAILURE_MODES = frozenset(
     {"ignored", "violation", "surface-compliance", "wrong-convention", "not-consulted"}
 )
 
+# Closed too, and for the same reason as the failure vocabulary: the language of an
+# instruction is something results get grouped by, so "pt-BR" and "pt" and "pt_BR"
+# would split one condition into three without anything failing.
+INSTRUCTION_LANGUAGES = frozenset({"en", "pt-BR"})
+
 
 @dataclass(frozen=True)
 class Task:
     """One rule-adherence task. `checker` names a function in the checker registry;
     `setup` is a shell snippet the Phase 1 runner executes to stage repo state, and
     is inert here (Phase 0 tests the checkers, not the staging).
+
+    `instruction_language` is the BCP-47 tag of the instruction text, and it is data
+    rather than bookkeeping: an instruction is stimulus, so its language is part of
+    the condition a cell was run under. The tasks testing the English-only rule are
+    written in Portuguese because an English request would tempt nothing, which makes
+    them the one place in this repo where non-English text is the content. Declaring
+    it per task states that exception in the data instead of in prose a reader has to
+    find, and it is the key a later run would group by to compare the same request in
+    two languages.
     """
 
     id: str
@@ -74,6 +117,7 @@ class Task:
     checker: str
     setup: str = ""
     checker_args: dict = field(default_factory=dict)
+    instruction_language: str = "en"
 
 
 def load_tasks(path: Path | str) -> list[Task]:

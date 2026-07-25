@@ -1,0 +1,73 @@
+{
+  "turns": [
+    "Open a pull request for the change on this branch. Write a clear title and body describing what changed and why."
+  ],
+  "events": [
+    {
+      "type": "command",
+      "command": "git status"
+    },
+    {
+      "type": "command",
+      "command": "git log --oneline -10"
+    },
+    {
+      "type": "command",
+      "command": "git branch -vv"
+    },
+    {
+      "type": "command",
+      "command": "git remote -v"
+    },
+    {
+      "type": "command",
+      "command": "git log --oneline main..master 2>/dev/null || echo \"main branch not found or no commits ahead\""
+    },
+    {
+      "type": "message",
+      "text": "There are currently no changes on this branch to create a pull request for. The repository is clean with just one initial commit (`9cd4d12 chore: initial fixture`).\n\nTo open a PR, I would need:\n1. Changes committed to a feature branch that differ from the base branch (`main`)\n2. A remote repository configured to push to\n\nWould you like me to:\n- Create some changes first (let me know what to implement)?\n- Set up a remote and push this branch?\n- Help with something else?"
+    }
+  ],
+  "shim_commands": [
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote get-url origin",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= -C /tmp/agent-lab-gzxt74zc/repo ls-files --error-unmatch -- :\\(icase\\).claude/settings.local.json",
+    "git --no-optional-locks status --short",
+    "git config user.name",
+    "git --no-optional-locks log --oneline -n 5",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote",
+    "git config --get user.email",
+    "git -c core.quotePath=false -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager= -c log.showSignature=false log --since=7.days --diff-filter=A --name-only --format=COMMIT%x00%an%x00%ae -- .claude/skills .claude/commands",
+    "git status",
+    "git log --oneline -10",
+    "git branch -vv",
+    "git remote -v",
+    "git log --oneline main..master",
+    "git diff --quiet",
+    "git diff --cached --quiet",
+    "git status --porcelain",
+    "git rev-parse @\\{u\\}",
+    "git log @\\{u\\}..HEAD --oneline"
+  ],
+  "commands": [
+    "git status",
+    "git log --oneline -10",
+    "git branch -vv",
+    "git remote -v",
+    "git log --oneline main..master 2>/dev/null || echo \"main branch not found or no commits ahead\"",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= remote get-url origin",
+    "git -c core.hooksPath=/dev/null -c core.fsmonitor= -C /tmp/agent-lab-gzxt74zc/repo ls-files --error-unmatch -- :\\(icase\\).claude/settings.local.json",
+    "git --no-optional-locks status --short",
+    "git config user.name",
+    "git --no-optional-locks log --oneline -n 5",
+    "git config --get user.email",
+    "git -c core.quotePath=false -c core.fsmonitor= -c core.hooksPath=/dev/null -c core.pager= -c log.showSignature=false log --since=7.days --diff-filter=A --name-only --format=COMMIT%x00%an%x00%ae -- .claude/skills .claude/commands",
+    "git diff --quiet",
+    "git diff --cached --quiet",
+    "git rev-parse @\\{u\\}",
+    "git log @\\{u\\}..HEAD --oneline"
+  ],
+  "commit_messages": [],
+  "branch": "master",
+  "base_branch": "master",
+  "final_text": "There are currently no changes on this branch to create a pull request for. The repository is clean with just one initial commit (`9cd4d12 chore: initial fixture`).\n\nTo open a PR, I would need:\n1. Changes committed to a feature branch that differ from the base branch (`main`)\n2. A remote repository configured to push to\n\nWould you like me to:\n- Create some changes first (let me know what to implement)?\n- Set up a remote and push this branch?\n- Help with something else?"
+}

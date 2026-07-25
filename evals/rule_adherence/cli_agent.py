@@ -1,16 +1,22 @@
-"""The real CLI agent adapter (Phase 1b): drive a coding-agent CLI and reduce its
-output into the event stream the runner expects.
+"""The real CLI agent adapter: drive a coding-agent CLI and reduce its output into
+the trajectory the runner expects.
 
 The load-bearing, testable part is `parse_claude_stream`: turning a Claude Code
-`--output-format stream-json` transcript into command/read/message events. That is
-pure and unit-tested against a fixture, so the reduction logic is trustworthy
-without a model call. `ClaudeCliAgent.run` is the thin integration around it: it
-shells out to `claude -p`, captures the stream, and parses it. It does a real model
-call, so it is never exercised in CI; the parser is what the tests cover.
+`--output-format stream-json` transcript into command/read/message events plus the
+token accounting. That is pure and unit-tested against a fixture, so the reduction
+logic is trustworthy without a model call. `ClaudeCliAgent.run` is the thin
+integration around it: it shells out to `claude -p`, captures the stream, and parses
+it. It does a real model call, so it is never exercised in CI; the parser is what
+the tests cover.
 
-Only Claude Code is wired first because its stream format is the best documented. A
-second adapter (pi, codex) is the same shape: run the CLI, map its events to the
-three event types.
+Multi-turn works by session resume. Turn 0 is a plain `claude -p`, whose events
+carry a session id; every later turn passes `--resume <id>` so the model sees the
+accumulated conversation. That is what makes the distance axis real: a rule stated
+at turn 0 and a task issued at turn 50 are separated by an actual conversation, not
+by a few lines of prompt text.
+
+Only Claude Code is wired here. A second adapter (pi, codex, agy) is the same shape:
+run the CLI, map its events to the three event types, read its usage report.
 """
 
 from __future__ import annotations
@@ -21,7 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
-from .agent import Event
+from .agent import AgentRun, Event
+from .schema import Usage
 
 # Tool names whose invocation we record. Bash -> a command; Read -> a file read.
 # Other tools (Edit, Write, Grep) leave their trace in the repo diff, which the
@@ -30,8 +37,20 @@ _BASH_TOOLS = frozenset({"Bash"})
 _READ_TOOLS = frozenset({"Read"})
 
 
-def parse_claude_stream(lines: Iterable[str]) -> list[Event]:
-    """Reduce a Claude Code stream-json transcript into ordered events.
+@dataclass(frozen=True)
+class ParsedStream:
+    """What one CLI invocation yields: the trajectory, the cost, and the handle
+    needed to continue the conversation on the next turn.
+    """
+
+    events: list[Event] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
+    session_id: str | None = None
+    is_error: bool = False
+
+
+def parse_claude_stream(lines: Iterable[str]) -> ParsedStream:
+    """Reduce a Claude Code stream-json transcript into ordered events plus usage.
 
     Recognizes assistant `tool_use` blocks (Bash -> command, Read -> read) in the
     order they appear, and emits a single final message event carrying the run's
@@ -42,6 +61,9 @@ def parse_claude_stream(lines: Iterable[str]) -> list[Event]:
     events: list[Event] = []
     result_text: str | None = None
     last_assistant_text: str = ""
+    usage = Usage()
+    session_id: str | None = None
+    is_error = False
 
     for line in lines:
         line = line.strip()
@@ -51,6 +73,9 @@ def parse_claude_stream(lines: Iterable[str]) -> list[Event]:
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
+
+        if session_id is None and isinstance(obj.get("session_id"), str):
+            session_id = obj["session_id"]
 
         kind = obj.get("type")
         if kind == "assistant":
@@ -64,10 +89,24 @@ def parse_claude_stream(lines: Iterable[str]) -> list[Event]:
                         events.append(event)
         elif kind == "result":
             result_text = obj.get("result", result_text)
+            usage = usage + _usage_from(obj.get("usage", {}))
+            is_error = bool(obj.get("is_error", False))
 
     final_text = result_text if result_text is not None else last_assistant_text
     events.append({"type": "message", "text": final_text})
-    return events
+    return ParsedStream(events=events, usage=usage, session_id=session_id, is_error=is_error)
+
+
+def _usage_from(raw: dict) -> Usage:
+    """Read the CLI's own token report. An absent key stays zero rather than being
+    guessed: a fabricated cost corrupts every comparison that reads it.
+    """
+    return Usage(
+        input_tokens=int(raw.get("input_tokens", 0) or 0),
+        output_tokens=int(raw.get("output_tokens", 0) or 0),
+        cache_read_tokens=int(raw.get("cache_read_input_tokens", 0) or 0),
+        cache_write_tokens=int(raw.get("cache_creation_input_tokens", 0) or 0),
+    )
 
 
 def _tool_event(block: dict) -> Event | None:
@@ -82,21 +121,67 @@ def _tool_event(block: dict) -> Event | None:
 
 @dataclass
 class ClaudeCliAgent:
-    """Drive `claude -p` in the repo and parse its stream. Real model call, so this
-    is never run in CI. `extra_args` lets a caller pass model, permission and sandbox
-    flags without this adapter hardcoding a policy.
+    """Drive `claude -p` in the repo, one invocation per turn, and parse each stream.
+    Real model call, so this is never run in CI. `extra_args` lets a caller pass
+    model, permission and sandbox flags without this adapter hardcoding a policy.
     """
 
     model: str | None = None
     timeout_s: int = 900
     extra_args: list[str] = field(default_factory=list)
+    # Run with the operator's own customizations disabled. A cell only measures the
+    # injected corpus if the injected corpus is the only rule set present, and by
+    # default this CLI loads the user's global instructions. In the first baseline
+    # sweep that leaked a standing "always work in a worktree" rule into every arm,
+    # including the control, and it is what produced the run's only failure mode.
+    # This is the same hermeticity the runner already enforces for git hooks.
+    isolate: bool = True
 
-    def run(self, prompt: str, repo_dir: Path) -> list[Event]:
-        cmd = ["claude", "-p", prompt, "--output-format", "stream-json", "--verbose"]
+    def run(self, turns: list[str], repo_dir: Path,
+            env: dict[str, str] | None = None) -> AgentRun:
+        events: list[Event] = []
+        usage = Usage()
+        session_id: str | None = None
+        last = len(turns) - 1
+
+        for index, turn in enumerate(turns):
+            try:
+                proc = subprocess.run(
+                    self._command(turn, session_id), cwd=repo_dir, env=env,
+                    capture_output=True, text=True, timeout=self.timeout_s,
+                )
+            except subprocess.TimeoutExpired:
+                return AgentRun(events, usage, error=f"timeout on turn {index}")
+
+            if proc.returncode != 0:
+                tail = (proc.stderr or "").strip().splitlines()
+                return AgentRun(events, usage, error=(
+                    f"exit {proc.returncode} on turn {index}: {tail[-1] if tail else ''}"))
+
+            parsed = parse_claude_stream(proc.stdout.splitlines())
+            usage = usage + parsed.usage
+            if parsed.is_error:
+                return AgentRun(events, usage, error=f"agent reported an error on turn {index}")
+
+            # Only the closing message of the last turn is what a checker reads, so
+            # intermediate message events are dropped. Their commands are not: a
+            # destructive command run at turn 3 still counts against the agent.
+            events.extend(parsed.events if index == last
+                          else [e for e in parsed.events if e.get("type") != "message"])
+
+            session_id = session_id or parsed.session_id
+            if session_id is None and index < last:
+                return AgentRun(events, usage,
+                                error=f"no session id after turn {index}; cannot continue")
+
+        return AgentRun(events=events, usage=usage)
+
+    def _command(self, turn: str, session_id: str | None) -> list[str]:
+        cmd = ["claude", "-p", turn, "--output-format", "stream-json", "--verbose"]
+        if self.isolate:
+            cmd.append("--safe-mode")
+        if session_id:
+            cmd += ["--resume", session_id]
         if self.model:
             cmd += ["--model", self.model]
-        cmd += self.extra_args
-        proc = subprocess.run(
-            cmd, cwd=repo_dir, capture_output=True, text=True, timeout=self.timeout_s
-        )
-        return parse_claude_stream(proc.stdout.splitlines())
+        return cmd + self.extra_args

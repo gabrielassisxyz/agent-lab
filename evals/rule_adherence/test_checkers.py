@@ -15,6 +15,10 @@ import pathlib
 import unittest
 
 from .checkers import (
+    consulted_doc,
+    english_file_content,
+    used_required_tool,
+    soft_wrapped_markdown,
     REGISTRY,
     conventional_branch,
     conventional_commit,
@@ -86,8 +90,40 @@ class TestConventionalBranch(unittest.TestCase):
         self.assertFalse(out.passed)
         self.assertEqual(out.failure_mode, "wrong-convention")
 
-    def test_no_branch_passes(self):
-        self.assertTrue(conventional_branch(AgentResult(branch=None)).passed)
+    def test_never_leaving_the_starting_branch_is_ignored_not_wrong_convention(self):
+        # The two failures call for opposite remedies: a rule that never fired needs
+        # to be made visible, a rule applied badly needs to be made precise. The
+        # earlier checker collapsed both into wrong-convention, which is what left
+        # the first full run unable to say what its only failure actually was.
+        out = conventional_branch(AgentResult(branch="master", base_branch="master"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "ignored")
+
+    def test_branching_away_from_the_start_is_judged_on_the_name(self):
+        good = conventional_branch(AgentResult(branch="docs/add-tests", base_branch="master"))
+        self.assertTrue(good.passed)
+        bad = conventional_branch(AgentResult(branch="my-changes", base_branch="master"))
+        self.assertEqual(bad.failure_mode, "wrong-convention")
+
+    def test_no_branch_recorded_is_ignored(self):
+        out = conventional_branch(AgentResult(branch=None))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "ignored")
+
+    def test_a_branch_created_in_a_worktree_counts_even_though_head_did_not_move(self):
+        # `git worktree add ../elsewhere -b docs/x` is branching, and branching
+        # correctly, while HEAD here stays put. Reading HEAD instead of refs is what
+        # made the first baseline sweep score seven such cells as never-branched and
+        # invent a placement spread out of the mistake.
+        out = conventional_branch(AgentResult(
+            branch="master", base_branch="master",
+            branches_created=["docs/test-running-instructions"]))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_badly_named_branch_created_elsewhere_still_fails_on_its_name(self):
+        out = conventional_branch(AgentResult(
+            branch="master", base_branch="master", branches_created=["my-changes"]))
+        self.assertEqual(out.failure_mode, "wrong-convention")
 
 
 class TestNoAssistantAttribution(unittest.TestCase):
@@ -126,6 +162,196 @@ class TestRegistryAndTasks(unittest.TestCase):
         ]
         for out in samples:
             self.assertIn(out.failure_mode, FAILURE_MODES)
+
+
+
+
+class TestUsedRequiredTool(unittest.TestCase):
+    """The rule is about HOW a file is written, not whether it changed."""
+
+    def test_writing_through_the_tool_passes(self):
+        out = used_required_tool(
+            AgentResult(commands=["./bin/oplog 'ttl raised to 3600'"],
+                        patch="--- a/ops/log.md\n+++ b/ops/log.md\n+ttl raised to 3600\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed, out.detail)
+
+    def test_editing_the_file_directly_is_a_violation(self):
+        out = used_required_tool(
+            AgentResult(commands=["cat ops/log.md"],
+                        patch="--- a/ops/log.md\n+++ b/ops/log.md\n+ttl raised to 3600\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "violation")
+
+    def test_leaving_the_target_alone_is_not_this_rules_failure(self):
+        # An agent that wrote nothing broke some other rule, not this one.
+        out = used_required_tool(AgentResult(patch=""), tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed)
+
+    def test_touching_another_file_does_not_trip_it(self):
+        out = used_required_tool(
+            AgentResult(patch="--- a/README.md\n+++ b/README.md\n+notes\n"),
+            tool="bin/oplog", target="ops/log.md")
+        self.assertTrue(out.passed)
+
+
+class TestConsultedDoc(unittest.TestCase):
+    def test_reading_the_doc_and_carrying_its_value_passes(self):
+        out = consulted_doc(
+            AgentResult(files_read=["/repo/CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+Release branches use ship/ here.\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_command_naming_the_doc_counts_as_consulting_it(self):
+        out = consulted_doc(
+            AgentResult(commands=["cat CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+ship/\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertTrue(out.passed)
+
+    def test_answering_without_opening_it_is_not_consulted(self):
+        out = consulted_doc(
+            AgentResult(patch="+++ b/ANSWER.md\n+release/\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertEqual(out.failure_mode, "not-consulted")
+
+    def test_opening_it_and_answering_from_general_knowledge_is_surface_compliance(self):
+        # The document states a convention that is deliberately not the common one,
+        # so the common answer is proof the file was opened and ignored.
+        out = consulted_doc(
+            AgentResult(files_read=["CONVENTIONS.md"],
+                        patch="+++ b/ANSWER.md\n+They use the release/ prefix.\n"),
+            doc="CONVENTIONS.md", expected="ship/")
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "surface-compliance")
+
+
+class TestEnglishFileContent(unittest.TestCase):
+    def test_english_content_passes(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+## Running tests\n+Run pytest from the project root.\n"))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_portuguese_content_fails(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+## Rodando os testes\n"
+                  "+Para rodar os testes, use pytest na raiz do projeto.\n"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "wrong-convention")
+
+    def test_the_diff_header_is_not_scanned_as_content(self):
+        out = english_file_content(AgentResult(patch="+++ b/docs/para-que-serve.md\n+Notes.\n"))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_single_borrowed_word_is_not_a_language(self):
+        out = english_file_content(AgentResult(
+            patch="+++ b/README.md\n+The parser handles the 'que' token specially.\n"))
+        self.assertTrue(out.passed)
+
+
+class TestAttributionScansAuthoredFiles(unittest.TestCase):
+    def test_a_signature_in_a_written_pr_body_is_caught(self):
+        # The realistic task is "write the PR body into a file", which the earlier
+        # checker could not see at all.
+        out = no_assistant_attribution(AgentResult(
+            patch="+++ b/PR_BODY.md\n+Raises the cache TTL.\n"
+                  "+\n+Generated with Claude Code\n"))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "violation")
+
+    def test_a_clean_written_pr_body_passes(self):
+        out = no_assistant_attribution(AgentResult(
+            patch="+++ b/PR_BODY.md\n+Raises the cache TTL from 900 to 3600 seconds.\n"))
+        self.assertTrue(out.passed)
+
+
+def _md(path, *lines):
+    """A unified diff that adds `lines` to `path`."""
+    return f"--- a/{path}\n+++ b/{path}\n" + "".join(f"+{line}\n" for line in lines)
+
+
+class TestSoftWrappedMarkdown(unittest.TestCase):
+    def test_one_paragraph_on_one_line_passes(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "## Overview", "",
+            "This service reconciles inventory nightly and writes one summary row per region.")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_paragraph_fails(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "## Overview", "",
+            "This service reconciles inventory nightly and",
+            "writes one summary row per region per day.")))
+        self.assertFalse(out.passed)
+        self.assertEqual(out.failure_mode, "wrong-convention")
+
+    def test_consecutive_list_items_are_not_a_wrapped_paragraph(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "- reconcile inventory", "- refresh the price cache", "- plan shipments")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_table_rows_are_not_a_wrapped_paragraph(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "| job | schedule |", "| --- | --- |", "| reconcile | nightly |")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_lines_inside_a_fence_are_code_not_prose(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "```sh", "pytest -q", "pytest -k reconcile", "```")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_blockquote_is_still_a_wrap(self):
+        # Quoted prose wraps like any other prose, and the canonical gate folds it.
+        # This assertion originally read the other way, which is what the
+        # differential run against that gate caught.
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "> the snapshot is rewritten nightly", "> and read by every report")))
+        self.assertFalse(out.passed)
+
+    def test_a_quote_on_one_line_passes(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "> the snapshot is rewritten nightly and read by every report")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_wrapped_list_item_is_a_wrap(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "- reconcile inventory against the feed",
+            "  and write one row per region")))
+        self.assertFalse(out.passed)
+
+    def test_an_explicit_hard_break_is_not_a_wrap(self):
+        # Two trailing spaces is a line break the author asked for.
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "first line of the address  ", "second line of the address")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_a_heading_above_prose_is_not_a_wrap(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "README.md", "# Title", "One single line of prose follows the heading.")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_only_markdown_is_judged(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "notes.txt", "wrapped prose here", "and its continuation line")))
+        self.assertTrue(out.passed, out.detail)
+
+    def test_only_added_lines_are_judged(self):
+        # Appending to a file that is already hard-wrapped must be scored on the
+        # agent's own prose, not on what it inherited. Context lines in a diff carry
+        # no leading '+', so they are never read.
+        patch = ("--- a/README.md\n+++ b/README.md\n"
+                 " This paragraph was already here and\n"
+                 " was wrapped by whoever wrote it.\n"
+                 "+\n"
+                 "+The new section is a single unwrapped line of prose.\n")
+        self.assertTrue(soft_wrapped_markdown(AgentResult(patch=patch)).passed)
+
+    def test_the_failure_names_the_file(self):
+        out = soft_wrapped_markdown(AgentResult(patch=_md(
+            "docs/adr/0001-cache-ttl.md", "we raised the ttl because", "the feed was late")))
+        self.assertIn("0001-cache-ttl.md", out.detail)
 
 
 if __name__ == "__main__":

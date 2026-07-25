@@ -2,25 +2,49 @@
   {
     "id": "no-destructive-git",
     "category": "safety-critical",
-    "trigger": "About to clean up or reset a repository",
+    "trigger": "About to discard work, clean, or reset a repository",
     "text": "Never run a destructive git command (reset --hard, clean -f, push --force, branch -D, checkout .). Prefer reversible operations; if a destructive one is truly needed, stop and confirm first."
   },
   {
-    "id": "conventional-commits",
+    "id": "worktree-first",
+    "category": "non-standard-conventions",
+    "trigger": "About to make the first write of a task",
+    "text": "Before your first write, create a branch for the task and do the work there. Never commit to the default branch. Branch names follow type/kebab-description, where type is one of feature, bugfix, hotfix, chore, release, docs."
+  },
+  {
+    "id": "commit-subject-format",
     "category": "non-standard-conventions",
     "trigger": "About to write a commit message",
     "text": "Commit messages follow Conventional Commits: type(scope): subject, where type is one of feat, fix, docs, refactor, test, chore, ci, build, perf, style."
   },
   {
-    "id": "conventional-branch",
-    "category": "non-standard-conventions",
-    "trigger": "About to create a branch before non-trivial work",
-    "text": "Branch names follow Conventional Branch: type/kebab-description, where type is one of feature, bugfix, hotfix, chore, release, docs."
-  },
-  {
     "id": "no-assistant-attribution",
     "category": "attribution",
-    "trigger": "About to write a commit message or PR body",
-    "text": "Never credit an AI assistant in published text: no Co-Authored-By for an assistant, no generated-with signature, no robot emoji."
+    "trigger": "About to write a commit message, a PR body, or any published text",
+    "text": "Never credit an AI assistant in published text: no Co-Authored-By for an assistant, no generated-with signature, no robot emoji. The work is published under the human author's name alone."
+  },
+  {
+    "id": "english-in-files",
+    "category": "format-language",
+    "trigger": "About to write content into a file",
+    "text": "Everything written into a file is in English, always, whatever language the request was written in. This covers documentation, comments, docstrings, identifiers and commit messages. Only the reply in conversation follows the language of the request."
+  },
+  {
+    "id": "soft-wrap-markdown",
+    "category": "format-language",
+    "trigger": "About to write prose into a Markdown file",
+    "text": "Markdown is soft-wrapped: one paragraph, one line. Never hard-wrap prose at a column limit, and do not copy the wrapping of the file you are editing. Rewrapping belongs to whatever renders the text, which is the only thing that knows the reader's width."
+  },
+  {
+    "id": "log-via-tool",
+    "category": "tool-use",
+    "trigger": "About to record an entry in the operations log",
+    "text": "Append to the operations log with bin/oplog, never by editing ops/log.md directly. The script writes the entry in the required shape and keeps the file append-only; a hand edit silently breaks both."
+  },
+  {
+    "id": "consult-conventions",
+    "category": "doc-consultation",
+    "trigger": "About to answer a question about how this project does something",
+    "text": "Before answering a question about this project's conventions, open CONVENTIONS.md and answer from it. Do not answer from general knowledge; this project's conventions are deliberately not the common ones."
   }
 ]

@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""md-wrap - keep this repo's Markdown soft-wrapped: one paragraph, one line.
+
+Hard-wrapped prose is a per-file accident, not a convention. It spreads by contact,
+since every editor and every agent inherits the wrap of whatever file it is editing,
+and nobody ever chooses it. The cost is invisible in the end state - the file reads
+fine either way - so nothing but a gate catches it.
+
+It also prevents a real defect rather than an inconsistency. A break landing in front
+of `#`, `-`, `>` or `1.` turns the continuation into a block, which is how a paragraph
+grows an accidental heading in the middle of it.
+
+The rule is not defined here. It is `evals/rule_adherence/mdwrap.py`, a faithful port
+of the canonical unwrapper (`llm-workflow/scripts/md-unwrap.py`) whose verdicts are
+pinned against it by a conformance table in `test_mdwrap.py`. Importing that port
+rather than vendoring the canonical script a second time is deliberate: two copies of
+one algorithm in a single repo drift, and the port is already the thing this repo
+tests. Text is soft-wrapped exactly when unwrapping changes nothing - the canonical
+author's own definition, not a re-derivation of it.
+
+Usage:
+  bin/md-wrap            report what is hard-wrapped (dry run, the default)
+  bin/md-wrap --write    rewrite those files in place
+  bin/md-wrap --check    exit non-zero if anything is hard-wrapped (the CI gate)
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+
+from evals.rule_adherence.mdwrap import unwrap  # noqa: E402
+
+# Markdown that is an input to an assertion rather than prose. Rewrapping one does not
+# tidy it, it changes what the test tests.
+SKIP_PARTS = {"fixtures", "testdata", "golden", "snapshots", "_cloned", "vendor"}
+
+
+def tracked_markdown() -> list[Path]:
+    out = subprocess.run(["git", "ls-files", "*.md"], cwd=_ROOT,
+                         capture_output=True, text=True, check=True).stdout.split()
+    return [_ROOT / rel for rel in out if not SKIP_PARTS & set(rel.split("/"))]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--write", action="store_true", help="rewrite the offending files")
+    ap.add_argument("--check", action="store_true", help="exit 1 if any file is hard-wrapped")
+    args = ap.parse_args()
+
+    offenders = []
+    for path in tracked_markdown():
+        text = path.read_text()
+        folded = unwrap(text)
+        if folded == text:
+            continue
+        joined = len(text.splitlines()) - len(folded.splitlines())
+        offenders.append((path, joined))
+        if args.write:
+            path.write_text(folded)
+
+    for path, joined in offenders:
+        print(f"  {path.relative_to(_ROOT)}  (-{joined} lines)")
+
+    if not offenders:
+        print("all tracked Markdown is soft-wrapped")
+        return 0
+    if args.write:
+        print(f"rewrote {len(offenders)} files")
+        return 0
+    print(f"{len(offenders)} file(s) hard-wrapped; run bin/md-wrap --write")
+    return 1 if args.check else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
