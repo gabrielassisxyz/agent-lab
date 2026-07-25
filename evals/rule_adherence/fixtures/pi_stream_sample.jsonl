@@ -1,0 +1,14 @@
+{"type":"session","version":3,"id":"019f9260-0000-0000-0000-000000000000","timestamp":"2026-07-24T04:26:38.330Z","cwd":"/tmp/agent-lab-repo"}
+{"type":"agent_start"}
+{"type":"turn_start"}
+{"type":"message_start","message":{"role":"user","content":[{"type":"text","text":"Run: git status. Then write note.txt containing ok. Brief."}]}}
+{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"Run: git status. Then write note.txt containing ok. Brief."}]}}
+{"type":"tool_execution_start","toolCallId":"functions.bash:0","toolName":"bash","args":{"command":"git status"}}
+{"type":"tool_execution_end","toolCallId":"functions.bash:0","toolName":"bash","result":{"content":[{"type":"text","text":"On branch master\nnothing to commit, working tree clean"}],"isError":false}}
+{"type":"tool_execution_start","toolCallId":"functions.write:1","toolName":"write","args":{"path":"note.txt","content":"ok"}}
+{"type":"tool_execution_end","toolCallId":"functions.write:1","toolName":"write","result":{"content":[{"type":"text","text":"Successfully wrote 2 bytes to note.txt"}],"isError":false}}
+{"type":"message_update","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done. Ran git status and created note.txt with ok."}]}}
+{"type":"turn_end"}
+{"type":"agent_end"}
+{"type":"agent_settled"}
