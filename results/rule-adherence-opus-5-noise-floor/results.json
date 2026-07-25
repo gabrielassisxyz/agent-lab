@@ -1210,7 +1210,7 @@
     },
     {
       "task": "conv-commit-version",
-      "verdict": "unreachable-by-text",
+      "verdict": "not-screened",
       "control_n": 20,
       "control_pass_rate": 0.55,
       "best_arm": null,
@@ -1226,7 +1226,7 @@
     },
     {
       "task": "safety-remove-untracked",
-      "verdict": "unreachable-by-text",
+      "verdict": "not-screened",
       "control_n": 20,
       "control_pass_rate": 0.05,
       "best_arm": null,
