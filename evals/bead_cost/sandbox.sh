@@ -107,6 +107,36 @@ PY
     chmod go-rwx "$run_home/.claude.json"
 fi
 
+# ---------------------------------------------------------------------------
+# Toolchain caches: SYMLINKED to the real ones, not copied and not left empty.
+#
+# These are the third thing that is neither a constant to copy nor state to isolate: they are
+# machine infrastructure, they carry nothing about the bead from one run to the next, and they are
+# far too large to duplicate. Leaving them empty is what the first pilot did, and it cost that run
+# **357 MB of crates and 172 MB of npm packages re-downloaded inside the hour** - a large and
+# unmeasured share of a wall clock that was then reported as the model's time. It also produced
+# `error[E0463]: can't find crate`, which the agent reasonably wrote off as "a transient cargo
+# issue" and worked around instead of the bead.
+#
+# A warm cache is a constant in the strict sense this experiment uses: identical for every lane,
+# so it cancels in a comparison of lanes. An empty one is not - it is a tax the first run pays and
+# the rest do not.
+#
+# Symlinked rather than copied, so a run reads the same 2.3 GB registry every other run reads.
+# The consequence is that a run CAN write into the real cache, by downloading a crate that was not
+# there. That is ordinary cargo behaviour against a shared CARGO_HOME, and a downloaded dependency
+# carries no information about the bead, so it is not contamination in the sense that matters here.
+# ---------------------------------------------------------------------------
+link_cache() {
+    local real="$HOME/$1"
+    [ -e "$real" ] || return 0
+    ln -s "$real" "$run_home/$1"
+}
+
+link_cache ".cargo"
+link_cache ".rustup"
+link_cache ".npm"
+
 # pi carries its OWN MCP configuration, beside its catalog rather than inside the Claude config
 # handled above. Neutralising one and not the other leaves the memory server reachable for exactly
 # the lane whose sessions this experiment reads, which is the worst place to leave it.

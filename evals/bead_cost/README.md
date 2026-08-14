@@ -35,6 +35,8 @@ being caught, and every trap it names applies unchanged:
 | `harden-worktree.sh` | narrow the jail's mapping to the run's own worktree, so the rubric is out of reach |
 | `score.sh` | apply the canonical verification to one run's worktree and emit its verdict |
 | `collect.py` | reduce one run to its record, from raw artefacts only, reporting absent as `null` |
+| `trail.py` | follow a pi session live, or read a finished one |
+| `agy_trail.py` | the same for agy, which does not stream and keeps its trajectory in SQLite |
 
 ## Constant is fine, varying is not
 
@@ -90,8 +92,15 @@ only rerun.
 
 ## Parallelism, once the pilot is clean
 
-- **Ollama: nine at once** - three account keys, three concurrent runs each, one model per key,
-  every pane pinned to one key from the start.
+- **Ollama: nine at once was the plan, and the first pilot argues against it.** Three account keys,
+  three concurrent runs each, one model per key, every pane pinned to one key from the start. The
+  pinning worked and is not in question - the deployment that rate-limited was the pinned one, by
+  name. What is in question is the concurrency: **a single run, alone on one key, hit `429` twice**,
+  and the second time four consecutive throttling errors exhausted the proxy's three retries and
+  ended the run. Three runs sharing that key would spend much of their wall clock in cooldown, and
+  that time would be reported as the model's. Measure the per-turn error rate at one and at two
+  concurrent runs before choosing a number; it costs two runs and it is the difference between
+  measuring the models and measuring the queue.
 - **`agy`: one at a time.** The quota does not support concurrency and the failure mode is several
   runs dying mid-way against a limit, which spends the quota *and* produces no data point.
 - **Claude and Codex last.** Codex waits for its window reset regardless.

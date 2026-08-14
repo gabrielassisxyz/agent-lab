@@ -65,6 +65,31 @@ else
     pass "no .claude.json to carry servers"
 fi
 
+echo "==> the toolchain caches are warm (an empty one is a tax the first run pays and the rest do not)"
+# Added after the first full pilot spent part of its hour re-downloading 357 MB of crates and
+# 172 MB of npm packages, because the sandbox HOME hid the real caches. That time was then
+# indistinguishable from the model's own, and it produced `can't find crate` errors the agent
+# worked around instead of the bead.
+for cache in .cargo .npm; do
+    if [ ! -e "$HOME/$cache" ]; then
+        pass "$cache does not exist on this machine either"
+    elif [ ! -e "$run_home/$cache" ]; then
+        bad "$cache is missing from the sandbox - this run will re-download the world"
+    elif [ ! -L "$run_home/$cache" ]; then
+        bad "$cache is a real directory, not a link - the run is not sharing the warm cache"
+    else
+        pass "$cache -> $(readlink "$run_home/$cache")"
+    fi
+done
+# Asserted on the artifact rather than on the link: a symlink to an empty directory passes every
+# check above and still costs the run a full download.
+crates=$(find "$run_home/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l)
+if [ "$crates" -gt 100 ]; then
+    pass "the crate cache is populated ($crates crates)"
+else
+    bad "only $crates crates reachable - the cache is linked but not warm"
+fi
+
 echo "==> the lane can actually be reached from inside the sandbox"
 # Added after a pilot run died with `Model "litellm/kimi-k2.7-k1" not found`: the sandbox had not
 # copied pi's model catalog, so the lane did not exist inside it. That is a whole run spent on a
