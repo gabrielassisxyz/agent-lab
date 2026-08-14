@@ -48,6 +48,17 @@ copy_constant "$HOME/.codex/AGENTS.md"             ".codex/AGENTS.md"
 copy_constant "$HOME/.codex/skills"                ".codex/skills"
 copy_constant "$HOME/.gemini/GEMINI.md"            ".gemini/GEMINI.md"
 copy_constant "$HOME/.pi/agent/AGENTS.md"          ".pi/agent/AGENTS.md"
+# pi keeps its provider catalog, its auth and its extensions beside that file, and all three are
+# CONSTANTS rather than state: without models.json the litellm ids are simply not known, and the
+# pilot run that found this failed with `Model "litellm/kimi-k2.7-k1" not found` before spending a
+# single token. The npm cache is copied for the same reason it is not state - without it pi
+# re-bootstraps itself on every run, which is noise in the wall clock and nothing else.
+copy_constant "$HOME/.pi/agent/models.json"        ".pi/agent/models.json"
+copy_constant "$HOME/.pi/agent/models-store.json"  ".pi/agent/models-store.json"
+copy_constant "$HOME/.pi/agent/settings.json"      ".pi/agent/settings.json"
+copy_constant "$HOME/.pi/agent/auth.json"          ".pi/agent/auth.json"
+copy_constant "$HOME/.pi/agent/extensions"         ".pi/agent/extensions"
+copy_constant "$HOME/.pi/agent/npm"                ".pi/agent/npm"
 copy_constant "$HOME/.config/opencode/AGENTS.md"   ".config/opencode/AGENTS.md"
 
 # Credentials are constants too: without them there is no run at all. They are copied rather than
@@ -94,6 +105,13 @@ with open(dest, "w") as handle:
     json.dump(config, handle, indent=2)
 PY
     chmod go-rwx "$run_home/.claude.json"
+fi
+
+# pi carries its OWN MCP configuration, beside its catalog rather than inside the Claude config
+# handled above. Neutralising one and not the other leaves the memory server reachable for exactly
+# the lane whose sessions this experiment reads, which is the worst place to leave it.
+if [ -f "$HOME/.pi/agent/mcp.json" ]; then
+    echo '{}' > "$run_home/.pi/agent/mcp.json"
 fi
 
 echo "$run_home"

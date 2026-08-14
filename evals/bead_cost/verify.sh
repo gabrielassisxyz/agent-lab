@@ -65,6 +65,32 @@ else
     pass "no .claude.json to carry servers"
 fi
 
+echo "==> the lane can actually be reached from inside the sandbox"
+# Added after a pilot run died with `Model "litellm/kimi-k2.7-k1" not found`: the sandbox had not
+# copied pi's model catalog, so the lane did not exist inside it. That is a whole run spent on a
+# question about the harness, and it is exactly what a pre-flight check is for. Asked of the tool
+# rather than of the filesystem, because a present catalog file that pi cannot parse looks
+# identical to a correct one.
+if [ -n "${BEAD_COST_MODEL:-}" ]; then
+    if ! command -v pi >/dev/null 2>&1; then
+        bad "pi is not on PATH"
+    elif HOME="$run_home" pi --list-models 2>/dev/null | grep -qF "${BEAD_COST_MODEL#litellm/}"; then
+        pass "$BEAD_COST_MODEL is known inside the sandbox"
+    else
+        bad "$BEAD_COST_MODEL is NOT known inside the sandbox - the catalog did not come across"
+    fi
+else
+    pass "no BEAD_COST_MODEL set, lane reachability not checked"
+fi
+
+if [ -f "$run_home/.pi/agent/mcp.json" ]; then
+    if [ "$(tr -d '[:space:]' < "$run_home/.pi/agent/mcp.json")" = "{}" ]; then
+        pass "pi's own mcp.json is neutralised"
+    else
+        bad "pi's mcp.json carries servers - the memory server is reachable for this lane"
+    fi
+fi
+
 echo "==> the benchmark's own notes are out of reach (the rubric names the plausible-wrong-fix)"
 # Checked THROUGH THE JAIL, not on the host. The host can obviously read its own files; the only
 # question that matters is what a run sees, and the first draft of this script asked the wrong one
