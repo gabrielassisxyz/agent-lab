@@ -2,7 +2,7 @@
 //!
 //! This file is the scorer's instrument, not the workspace's. It is copied into
 //! `tests/benchmark_arch_42q_verify.rs` of a scoring worktree AFTER a run's diff is applied, and
-//! never exists in the tree a benchmarked model works in — for the reason SWE-bench applies its
+//! never exists in the tree a benchmarked model works in - for the reason SWE-bench applies its
 //! `test_patch` from outside: a model that can read the acceptance test is being scored on
 //! reading comprehension.
 //!
@@ -12,7 +12,7 @@
 //!
 //! Method comes from the bead itself: *"Proven by a loopback server that counts requests per path
 //! and a test asserting the count, not by reading the archive afterwards."* Counting at the server
-//! is what separates the real fix from the plausible wrong one — decoding where the depth map
+//! is what separates the real fix from the plausible wrong one - decoding where the depth map
 //! reads `page_links` corrects identity and leaves the request count untouched.
 //!
 //! Run: `cargo test --test benchmark_arch_42q_verify -- --nocapture`
@@ -138,15 +138,15 @@ const POST: &str = "<html><head><title>A post</title></head><body>\
 /// that are load-bearing, and both were learned by measuring an unfixed tree rather than reasoning
 /// about it.**
 ///
-/// *Separate pages*, because canonicalization already folds the spellings into one item — that is
-/// what `arch-s9b` landed — so links on a single page are deduplicated before anything is fetched
+/// *Separate pages*, because canonicalization already folds the spellings into one item - that is
+/// what `arch-s9b` landed - so links on a single page are deduplicated before anything is fetched
 /// and the base tree issues exactly one request. The bead's own case is a publication whose pages
 /// each link one post their own way; the crawl meets them separately, so each spelling reaches the
 /// frontier on its own.
 ///
 /// *No plain spelling*, because a control page writing `?x=1&y=2` hands the crawl a way to be
 /// **accidentally right**: whichever page it reaches first decides which spelling goes on the
-/// wire, and the fixture passes or fails by that race. Measured — three consecutive runs of one
+/// wire, and the fixture passes or fails by that race. Measured - three consecutive runs of one
 /// unfixed tree gave three different verdicts. With every page escaping the separator, the only
 /// way `?x=1&y=2` can reach the server is by being decoded, which is precisely the fix under test.
 const LINKS_NAMED: &str = "<html><head><title>a</title></head><body>\
@@ -188,7 +188,7 @@ fn crawl() -> (Site, TempDir) {
         .expect("archeion runs");
 
     // Deliberately NOT `assert!(output.status.success())`. An unfixed tree exits non-zero here
-    // because it loses a link — that is the bug, not a broken harness, and a guard on the exit
+    // because it loses a link - that is the bug, not a broken harness, and a guard on the exit
     // code makes every assertion below fail for a reason that has nothing to do with what it
     // claims to measure. The first draft of this file did exactly that and failed 5/5 on a tree
     // whose behaviour it had not yet observed.
@@ -220,7 +220,7 @@ const SPELLINGS: [(&str, &str); 3] = [
 /// One crawl, five verdicts.
 ///
 /// **Deliberately a single `#[test]`, and that is a correction rather than a style choice.** The
-/// first draft gave each criterion its own test, so each ran its own crawl — and three consecutive
+/// first draft gave each criterion its own test, so each ran its own crawl - and three consecutive
 /// runs of the same unfixed tree failed 3, then 4, then 2 of them. Five crawls give five
 /// independently noisy answers, and section A becomes noise spread across 45 runs. One crawl judged
 /// five ways removes that: every criterion below is a question about one request log, phrased as a
@@ -228,7 +228,7 @@ const SPELLINGS: [(&str, &str); 3] = [
 ///
 /// **Each spelling links a post of its own** (`/p/named`, `/p/decimal`, `/p/hex`) rather than all
 /// three linking one post. Sharing one address let canonicalization fold them, so exactly one
-/// request went out and *which spelling it carried was a race* — A3, A4 and A5 flipped between runs
+/// request went out and *which spelling it carried was a race* - A3, A4 and A5 flipped between runs
 /// of an unmodified tree. With three addresses, every spelling is guaranteed its own request and
 /// every criterion is decided by the fix rather than by scheduling.
 ///
@@ -244,24 +244,24 @@ fn section_a_of_the_rubric() {
         .filter(|target| target.starts_with("/p/"))
         .collect();
 
-    // A1 — one request per distinct page. Each post is linked once, by one spelling, so anything
+    // A1 - one request per distinct page. Each post is linked once, by one spelling, so anything
     // above one is a page fetched twice for one address.
     let a1 = SPELLINGS
         .iter()
         .all(|(path, _)| counts.get(*path).copied().unwrap_or(0) == 1);
 
-    // A2 — the request line carries the parameters the page meant, for every spelling.
+    // A2 - the request line carries the parameters the page meant, for every spelling.
     let a2 = post_targets.len() == SPELLINGS.len()
         && SPELLINGS
             .iter()
             .all(|(_, meant)| targets.iter().any(|target| target == meant));
 
-    // A3 — no `amp;`-prefixed parameter reaches the server. Separate from A2 because it is the
+    // A3 - no `amp;`-prefixed parameter reaches the server. Separate from A2 because it is the
     // failure measured in the wild: the origin is asked about a parameter nobody meant to ask
     // about, and answers however that site treats an unknown one.
     let a3 = !targets.iter().any(|target| target.contains("amp;"));
 
-    // A4 — a numeric reference does not cost the parameter behind it. It fails worse than `&amp;`
+    // A4 - a numeric reference does not cost the parameter behind it. It fails worse than `&amp;`
     // and differently: a URL parser cuts at `#`, so `?x=1&#38;y=2` parses with the query `x=1&`
     // and the fragment `38;y=2`, the fragment is dropped, and `y=2` is gone from the address
     // rather than merely misnamed. Nothing reports it, which is why it is asserted on its own.
@@ -270,7 +270,7 @@ fn section_a_of_the_rubric() {
             target.contains("y=2") && !target.contains("38;") && !target.contains("x26;")
         });
 
-    // A5 — the archive holds one item per distinct page, under the address the page meant.
+    // A5: the archive holds one item per distinct page, under the address the page meant.
     let archive = Archive::open_existing(&temp.path().join("archive")).expect("the archive exists");
     let a5 = SPELLINGS.iter().all(|(_, meant)| {
         CanonicalUrl::parse(&site.url(meant))
@@ -284,6 +284,6 @@ fn section_a_of_the_rubric() {
 
     assert!(
         a1 && a2 && a3 && a4 && a5,
-        "section A not satisfied — a1:{a1} a2:{a2} a3:{a3} a4:{a4} a5:{a5}\ntargets: {targets:#?}"
+        "section A not satisfied. a1:{a1} a2:{a2} a3:{a3} a4:{a4} a5:{a5}\ntargets: {targets:#?}"
     );
 }
