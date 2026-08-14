@@ -13,14 +13,24 @@
 # these into a file without filtering prose out of them.
 set -euo pipefail
 
-worktree="${1:?usage: score.sh <run-worktree> [<run-id>]}"
+worktree="${1:?usage: score.sh <run-worktree> [<run-id>] [<run-home>]}"
 run_id="${2:-$(basename "$worktree")}"
+run_home="${3:-}"
 here="$(cd "$(dirname "$0")" && pwd)"
 
 # Asked of git rather than of the filesystem: in a LINKED worktree `.git` is a file pointing at the
 # main repo, not a directory, so a `-d` test rejects exactly the worktrees this benchmark runs in.
 git -C "$worktree" rev-parse --git-dir >/dev/null 2>&1 ||
     { echo "score: $worktree is not a git worktree" >&2; exit 1; }
+
+# A run is free to move its work, and one did: the global instruction files this sandbox carries
+# tell an agent to create its own worktree before its first write, and an agent followed them.
+# Given the run's HOME, find where the work actually landed instead of grading the tree the run
+# was launched in and abandoned.
+if [ -n "$run_home" ]; then
+    worktree=$("$here/find-work.sh" "$worktree" "$run_home")
+fi
+echo "score: grading $worktree" >&2
 
 # The scoring build gets its own target dir, so it never warms - or is warmed by - a run's build.
 # Wall clock is measured on the run, never here, but a shared cache would still let one run's

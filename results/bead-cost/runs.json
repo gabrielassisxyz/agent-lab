@@ -1,0 +1,62 @@
+{
+  "kimi-k2.7-via-pi": {
+    "lane": "litellm/kimi-k2.7 (keys k1 then k3)",
+    "harness": "pi",
+    "invocations": 3,
+    "wall_clock_note": "60min ceiling + 6.5min 429 + 4min; not a clean signal",
+    "killed_by": [
+      "harness timeout",
+      "429 throttling",
+      null
+    ],
+    "commit": "6b743bc",
+    "section_a": {
+      "a1": true,
+      "a2": true,
+      "a3": true,
+      "a4": true,
+      "a5": true
+    },
+    "suite": {
+      "passed": 502,
+      "failed": 0
+    },
+    "cost_valid": false,
+    "cost_invalid_because": [
+      "357MB crates + 172MB npm re-downloaded inside the measured hour",
+      "wall clock spans three invocations plus a probe turn injected by the operator",
+      "two rate-limit kills"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy": {
+    "lane": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "invocations": 1,
+    "wall_clock_note": "1352.9s reported by the envelope",
+    "killed_by": [
+      null
+    ],
+    "commit": "08cac62",
+    "section_a": {
+      "a1": true,
+      "a2": true,
+      "a3": true,
+      "a4": true,
+      "a5": true
+    },
+    "suite": {
+      "failed": 0
+    },
+    "usage_reported": {
+      "input_tokens": 1414924,
+      "output_tokens": 106995,
+      "thinking_tokens": 68399,
+      "cache_read_tokens": 37017835
+    },
+    "cost_valid": false,
+    "cost_invalid_because": [
+      "ran in the same environment whose defects invalidated the other lane",
+      "cache accounting is not comparable across lanes: this meter reports cache reads, the other does not"
+    ]
+  }
+}
