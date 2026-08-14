@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Build the isolated HOME one bead-cost run executes in.
+#
+# The rule this implements: keep everything CONSTANT across runs, isolate everything that VARIES.
+# A constant shifts every lane by the same amount and cancels in a comparison of lanes - the global
+# config files are not overhead to be stripped, they are the floor the decision is about. What
+# ruins the measurement is state that differs between runs, and worst of all state that accumulates
+# as the runs go, so the last lane is measured on an easier problem than the first.
+#
+# Why an overridden HOME and not a per-tool flag: measured, and documented for agy specifically -
+# GEMINI_CLI_HOME relocates the conversation store but NOT the context file. Only HOME moves both.
+# Note that the documented agy recipe deliberately STRIPS the context file; here the opposite is
+# wanted, so the constants are copied in and only the state is left empty.
+#
+#   ./sandbox.sh <run-id>        # prints the HOME it built
+#
+set -euo pipefail
+
+run_id="${1:?usage: sandbox.sh <run-id>}"
+root="${BEAD_COST_ROOT:-$HOME/tmp/bead-cost}"
+run_home="$root/$run_id/home"
+
+if [ -e "$run_home" ]; then
+    echo "sandbox: $run_home already exists - a run id is used once, so its data is never" >&2
+    echo "         two runs mixed. Remove it deliberately or pick another id." >&2
+    exit 1
+fi
+
+mkdir -p "$run_home"
+
+# ---------------------------------------------------------------------------
+# The constants: copied, never symlinked.
+#
+# A symlink would let a run write back into the real config and change what every later run reads -
+# which is the accumulating-state failure this whole script exists to prevent.
+# ---------------------------------------------------------------------------
+copy_constant() {
+    local src="$1" dest="$run_home/$2"
+    [ -e "$src" ] || return 0
+    mkdir -p "$(dirname "$dest")"
+    cp -r "$src" "$dest"
+}
+
+copy_constant "$HOME/.claude/CLAUDE.md"            ".claude/CLAUDE.md"
+copy_constant "$HOME/.claude/settings.json"        ".claude/settings.json"
+copy_constant "$HOME/.claude/skills"               ".claude/skills"
+copy_constant "$HOME/.codex/AGENTS.md"             ".codex/AGENTS.md"
+copy_constant "$HOME/.codex/skills"                ".codex/skills"
+copy_constant "$HOME/.gemini/GEMINI.md"            ".gemini/GEMINI.md"
+copy_constant "$HOME/.pi/agent/AGENTS.md"          ".pi/agent/AGENTS.md"
+copy_constant "$HOME/.config/opencode/AGENTS.md"   ".config/opencode/AGENTS.md"
+
+# Credentials are constants too: without them there is no run at all. They are copied rather than
+# linked for the same write-back reason, and the run root is created private below.
+for auth in oauth_creds.json google_accounts.json installation_id settings.json projects.json; do
+    copy_constant "$HOME/.gemini/$auth" ".gemini/$auth"
+done
+copy_constant "$HOME/.claude/.credentials.json" ".claude/.credentials.json"
+copy_constant "$HOME/.config/zsh/secrets"       ".config/zsh/secrets"
+copy_constant "$HOME/.config/gh"                ".config/gh"
+
+chmod -R go-rwx "$root/$run_id"
+
+# ---------------------------------------------------------------------------
+# The state: present and empty, so a tool creates its store here and not in the real HOME.
+# ---------------------------------------------------------------------------
+mkdir -p "$run_home/.claude/projects"      # session transcripts
+mkdir -p "$run_home/.claude/todos"
+mkdir -p "$run_home/.codex/sessions"
+mkdir -p "$run_home/.pi/agent/sessions"
+mkdir -p "$run_home/.gemini/antigravity-cli/conversations"
+mkdir -p "$run_home/.local/state"
+
+# ai-memory is the one that matters. It writes and reads back, so run 1 records what it learned
+# about the bead and run 7 starts ahead - contamination, not noise, and it favours whichever lane
+# runs last. An empty store here is what keeps every run's first read empty.
+mkdir -p "$run_home/.local/share/ai-memory"
+
+# The MCP servers are removed rather than left configured: ai-memory would reconnect to the real
+# store regardless of HOME if its path is absolute, and the web-reaching ones let a model find an
+# answer instead of deriving one, which is a different capability than the one being priced.
+if [ -f "$HOME/.claude.json" ]; then
+    python3 - "$HOME/.claude.json" "$run_home/.claude.json" <<'PY'
+import json, sys
+src, dest = sys.argv[1], sys.argv[2]
+with open(src) as handle:
+    config = json.load(handle)
+config.pop("mcpServers", None)
+for project in config.get("projects", {}).values():
+    if isinstance(project, dict):
+        project.pop("mcpServers", None)
+        project.pop("history", None)
+with open(dest, "w") as handle:
+    json.dump(config, handle, indent=2)
+PY
+    chmod go-rwx "$run_home/.claude.json"
+fi
+
+echo "$run_home"
