@@ -53,11 +53,15 @@ def read_pi_session(session_dir: pathlib.Path) -> dict:
         if isinstance(usage, dict):
             seen_usage = True
             turns += 1
+            # The bare forms - `input`, `output`, `cacheRead`, `reasoning` - are the ones pi
+            # actually writes, and they were missing from every list below. The result was not a
+            # crash but the worst possible output: a well-formed record reporting 0 tokens for a
+            # run of 22 turns, which reads as a measurement and is not one.
             for key, aliases in (
-                ("input_tokens", ("input_tokens", "inputTokens", "prompt_tokens")),
-                ("output_tokens", ("output_tokens", "outputTokens", "completion_tokens")),
-                ("cache_read_tokens", ("cache_read_tokens", "cacheReadTokens", "cache_read_input_tokens")),
-                ("reasoning_tokens", ("reasoning_tokens", "reasoningTokens")),
+                ("input_tokens", ("input", "input_tokens", "inputTokens", "prompt_tokens")),
+                ("output_tokens", ("output", "output_tokens", "outputTokens", "completion_tokens")),
+                ("cache_read_tokens", ("cacheRead", "cache_read_tokens", "cacheReadTokens", "cache_read_input_tokens")),
+                ("reasoning_tokens", ("reasoning", "reasoning_tokens", "reasoningTokens")),
             ):
                 for alias in aliases:
                     value = usage.get(alias)
@@ -67,6 +71,54 @@ def read_pi_session(session_dir: pathlib.Path) -> dict:
 
     record = {"session_log": str(log), "turns": turns or None}
     record.update({key: (value if seen_usage else None) for key, value in totals.items()})
+    # Ollama does not publish cache information at all, so pi's `cacheRead` is a field with a
+    # default rather than a reading. Summed it comes out as a confident 0, and a 0 that means "not
+    # reported" priced against a 0 that means "no cache was read" is a cost conclusion drawn from
+    # nothing. Said here rather than left for whoever reads the table.
+    record["cache_read_note"] = "the Ollama lanes do not report cache reads; a 0 here is absence, not a measurement"
+    # Summing per-turn input counts the whole prompt again every turn, which is what the lane
+    # actually sends but NOT what the other lane's envelope reports. The two are not comparable.
+    record["input_note"] = "per-turn input summed; not comparable with an envelope-reported total"
+    return record
+
+
+def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
+    """Read the single JSON envelope agy writes at the end of a `--print` run.
+
+    agy does not stream: launched with `--output-format=json` it emits one object when the run is
+    over, so there is no per-turn log to sum and the envelope IS the measurement. Its `num_turns`
+    counts agy's own retries rather than the model's turns, and `status` - not the exit code - is
+    what says whether the run succeeded.
+
+    The two lanes' figures are NOT comparable and must never be quoted as if they were: agy reports
+    cache reads and the Ollama lanes do not report them at all, so summing per-turn input on one
+    side and reading an envelope on the other counts different things.
+    """
+    if not stdout.exists():
+        return None
+    try:
+        envelope = json.loads(stdout.read_text(errors="replace"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("usage"), dict):
+        return None
+
+    usage = envelope["usage"]
+    record = {
+        "session_log": str(stdout),
+        "status": envelope.get("status"),
+        "turns": envelope.get("num_turns"),
+        "duration_seconds": envelope.get("duration_seconds"),
+    }
+    for key, aliases in (
+        ("input_tokens", ("input_tokens",)),
+        ("output_tokens", ("output_tokens",)),
+        ("cache_read_tokens", ("cache_read_tokens",)),
+        ("reasoning_tokens", ("thinking_tokens", "reasoning_tokens")),
+    ):
+        record[key] = next(
+            (usage[alias] for alias in aliases if isinstance(usage.get(alias), (int, float))), None
+        )
     return record
 
 
@@ -123,8 +175,19 @@ def main() -> int:
     # two cost the same quota and mean opposite things.
     record["timeout"] = record.get("exit_code") in ("exit: 124", "124")
 
+    lane_file = args.run_dir / "lane"
+    record["lane"] = lane_file.read_text().strip() if lane_file.exists() else None
+    model_file = args.run_dir / "model"
+    record["model"] = model_file.read_text().strip() if model_file.exists() else None
+
+    # Each harness keeps its usage somewhere different, so the source is chosen rather than guessed:
+    # pi streams a session log, agy writes one envelope at the end. Trying the pi log first and
+    # falling through keeps a run whose lane was never recorded readable.
     session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")
-    record["usage"] = read_pi_session(session_dir) if session_dir.exists() else None
+    usage = read_pi_session(session_dir) if session_dir.exists() else None
+    if usage is None or usage.get("turns") is None:
+        usage = read_agy_envelope(args.run_dir / "stdout.txt") or usage
+    record["usage"] = usage
     record["worktree"] = read_worktree(args.worktree) if args.worktree else None
 
     json.dump(record, sys.stdout, indent=2)
