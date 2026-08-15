@@ -14,6 +14,8 @@
 set -euo pipefail
 
 run_home="${1:?usage: verify.sh <run-home>}"
+root="${BEAD_COST_ROOT:-$HOME/tmp/bead-cost}"
+run_home_dir="$(dirname "$run_home")"
 fail=0
 
 pass() { printf '  ok    %s\n' "$1"; }
@@ -30,6 +32,19 @@ if grep -q "Cheap-lane routing" "$run_home/.claude/CLAUDE.md" 2>/dev/null; then
     pass "the global config carries the current rule set"
 else
     bad "the global config predates the cheap-lane routing rule - it is a stale copy"
+fi
+
+# The credentials each lane actually authenticates with. Checked by name rather than by asking the
+# lane, because asking agy costs a request against a weekly window that opens on first use - and
+# checked at all because the agy lane's credential is the one that is easy to believe is already
+# there: `oauth_creds.json` is copied, looks like a Google credential, and is the wrong file.
+agy_token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+if [ ! -e "$agy_token" ]; then
+    pass "no antigravity token on this machine either - the agy lane is not configured here"
+elif [ -s "$run_home/.gemini/antigravity-cli/antigravity-oauth-token" ]; then
+    pass "the agy lane's antigravity token came across"
+else
+    bad "the agy lane's antigravity token is missing - agy will fail auth in seconds and produce no data point"
 fi
 
 skills=$(find "$run_home/.claude/skills" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l)
@@ -70,42 +85,58 @@ echo "==> the toolchain caches are warm (an empty one is a tax the first run pay
 # 172 MB of npm packages, because the sandbox HOME hid the real caches. That time was then
 # indistinguishable from the model's own, and it produced `can't find crate` errors the agent
 # worked around instead of the bead.
-for cache in .cargo .npm; do
-    if [ ! -e "$HOME/$cache" ]; then
-        pass "$cache does not exist on this machine either"
-    elif [ ! -e "$run_home/$cache" ]; then
-        bad "$cache is missing from the sandbox - this run will re-download the world"
-    elif [ ! -L "$run_home/$cache" ]; then
-        bad "$cache is a real directory, not a link - the run is not sharing the warm cache"
+if [ ! -d "$HOME/.npm" ]; then
+    pass ".npm does not exist on this machine either"
+elif [ -L "$run_home/.npm" ]; then
+    bad ".npm is linked whole - a run's npm bookkeeping races every other run's"
+elif [ ! -L "$run_home/.npm/_cacache" ]; then
+    bad ".npm/_cacache is not shared - this run will re-download its packages"
+else
+    pass ".npm is private with _cacache shared"
+fi
+
+# The cargo split, asserted in both directions, because getting either half wrong is silent and
+# expensive. A shared `src` lets a run edit its dependencies for everyone - which is how an
+# untouched base tree started passing the canonical verification, after a run patched `spider` to
+# fix the bead inside the crate. A private `cache` re-downloads 357 MB inside the measured hour.
+if [ -d "$HOME/.cargo" ]; then
+    if [ -L "$run_home/.cargo" ]; then
+        bad ".cargo is linked whole - a run can edit the machine's dependency sources for every later run"
+    elif [ ! -d "$run_home/.cargo/registry/src" ]; then
+        bad ".cargo/registry/src is missing - cargo has nowhere private to extract into"
+    elif [ -L "$run_home/.cargo/registry/src" ]; then
+        bad ".cargo/registry/src is a link to the shared sources - a run's edits would outlive it"
     else
-        pass "$cache -> $(readlink "$run_home/$cache")"
+        pass ".cargo/registry/src is private to this run"
     fi
-done
+    for shared in cache index; do
+        if [ -L "$run_home/.cargo/registry/$shared" ]; then
+            pass ".cargo/registry/$shared is shared (downloads are not re-paid)"
+        else
+            bad ".cargo/registry/$shared is not shared - this run will re-download the world"
+        fi
+    done
+fi
 # Asserted on the artifact rather than on the link: a symlink to an empty directory passes every
 # check above and still costs the run a full download.
-crates=$(find "$run_home/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l)
+# -L, because `cache` is now the final component of the path AND a symlink, and find does not
+# descend into a terminal symlink without it. Silent when wrong: the count comes back 0 and reads
+# as a cold cache rather than as a check looking at the link instead of through it.
+crates=$(find -L "$run_home/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l)
 if [ "$crates" -gt 100 ]; then
     pass "the crate cache is populated ($crates crates)"
 else
     bad "only $crates crates reachable - the cache is linked but not warm"
 fi
 
-echo "==> the lane can actually be reached from inside the sandbox"
-# Added after a pilot run died with `Model "litellm/kimi-k2.7-k1" not found`: the sandbox had not
-# copied pi's model catalog, so the lane did not exist inside it. That is a whole run spent on a
-# question about the harness, and it is exactly what a pre-flight check is for. Asked of the tool
-# rather than of the filesystem, because a present catalog file that pi cannot parse looks
-# identical to a correct one.
-if [ -n "${BEAD_COST_MODEL:-}" ]; then
-    if ! command -v pi >/dev/null 2>&1; then
-        bad "pi is not on PATH"
-    elif HOME="$run_home" pi --list-models 2>/dev/null | grep -qF "${BEAD_COST_MODEL#litellm/}"; then
-        pass "$BEAD_COST_MODEL is known inside the sandbox"
-    else
-        bad "$BEAD_COST_MODEL is NOT known inside the sandbox - the catalog did not come across"
-    fi
+# The lane's own reachability - added after a pilot run died with `Model "litellm/kimi-k2.7-k1" not
+# found` before spending a token, because the sandbox had not copied pi's model catalog - is asked
+# further down, inside the jail. Asking it here as well would be asking about a configuration no run
+# executes in, which is the mistake the jail section exists to correct.
+if command -v pi >/dev/null 2>&1; then
+    pass "pi is on PATH"
 else
-    pass "no BEAD_COST_MODEL set, lane reachability not checked"
+    bad "pi is not on PATH"
 fi
 
 if [ -f "$run_home/.pi/agent/mcp.json" ]; then
@@ -116,42 +147,162 @@ if [ -f "$run_home/.pi/agent/mcp.json" ]; then
     fi
 fi
 
-echo "==> the benchmark's own notes are out of reach (the rubric names the plausible-wrong-fix)"
-# Checked THROUGH THE JAIL, not on the host. The host can obviously read its own files; the only
-# question that matters is what a run sees, and the first draft of this script asked the wrong one
-# and would have passed a sandbox that leaked.
-notes="$HOME/repositories/project-notes/llm-workflow"
-if [ ! -d "$notes" ]; then
-    pass "project-notes/llm-workflow is not present on this machine"
-elif [ -z "${BEAD_COST_WORKTREE:-}" ]; then
-    bad "set BEAD_COST_WORKTREE=<run-worktree> so this can be checked inside the jail, not on the host"
-elif [ ! -f "$BEAD_COST_WORKTREE/.ai-jail" ]; then
-    bad "$BEAD_COST_WORKTREE has no .ai-jail - run harden-worktree.sh, or the default rw_maps mounts all of ~/repositories"
-elif ! command -v ai-jail >/dev/null 2>&1; then
-    bad "ai-jail is not on PATH, so the one check that matters cannot be made"
-elif (cd "$BEAD_COST_WORKTREE" && ai-jail --exec ls "$notes" >/dev/null 2>&1); then
-    bad "a jailed process READ project-notes/llm-workflow - a run can be handed section B's answer"
+echo "==> there is room to build (a full disk fails a run in a way that blames the model)"
+# Added after /mnt/build went from 141 GB free to zero in six hours and took a sweep with it. Every
+# run gets a build directory per lane and every scored tree gets one of its own, at roughly 4.5 GB
+# each, so a night of runs is tens of gigabytes and the growth is invisible until it is not.
+#
+# What it costs when unchecked is worse than the space: the runs did not stop, they failed instantly
+# and in a loop, each one burning a run id and a strike, so the log filled with lanes resting for
+# three consecutive failures that were all one full filesystem. A gate here turns that into a
+# refusal to start.
+build_root="${BEAD_COST_BUILD_ROOT:-/mnt/build}"
+build_free_gb=$(df -BG --output=avail "$build_root" 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ -z "$build_free_gb" ]; then
+    bad "cannot read free space on $build_root"
+elif [ "$build_free_gb" -lt "${BEAD_COST_MIN_FREE_GB:-20}" ]; then
+    bad "$build_root has only ${build_free_gb}G free - a run needs room for a lane build and a scoring build"
 else
-    pass "a jailed process cannot read project-notes/llm-workflow"
+    pass "$build_root has ${build_free_gb}G free"
 fi
 
-echo "==> the subject repo is at one base commit, and no run branch is visible to another"
-archeion="${BEAD_COST_SUBJECT:-$HOME/repositories/archeion}"
-if [ -d "$archeion/.git" ]; then
-    dirty=$(git -C "$archeion" status --porcelain | wc -l)
-    if [ "$dirty" -eq 0 ]; then pass "archeion is clean"; else bad "archeion has $dirty uncommitted change(s) - runs would branch off an unrecorded tree"; fi
-    if git -C "$archeion" log --oneline -1 --format=%H >/dev/null 2>&1; then
-        pass "base commit $(git -C "$archeion" rev-parse --short HEAD)"
-    fi
-    # The bead must still be open. A merged fix means there is nothing left to measure, and every
-    # later run would be scored against a tree that already passes.
-    if git -C "$archeion" log --oneline -20 | grep -qi "arch-42q"; then
-        bad "a commit mentioning arch-42q is in history - the subject may already be fixed"
-    else
-        pass "no arch-42q fix in recent history"
-    fi
+echo "==> the checkout has a ref namespace of its own (no run can read another run's answer)"
+# THE gate this experiment was missing, and the reason the pilot's successors would have been void.
+# Runs used to be linked worktrees of the shared subject repository, which share one ref namespace,
+# so from inside any of them `git log --all --oneline` opened with:
+#
+#     6b743bc fix(crawl): decode HTML entities in hrefs before the engine builds URLs
+#     08cac62 fix(crawl): decode HTML entities in discovered link hrefs
+#
+# - an earlier run's commit subject naming both the fix and the layer it belongs in, which is what
+# the rubric's judgement section scores. An agent was observed running `git log` looking for `arch-`
+# beads mid-run, and none of it would appear in the diff being graded.
+#
+# Asserted on reachability rather than on the list of ref NAMES. A name-based check passes the
+# moment someone adds a branch this script has not been taught about, and the property that matters
+# is not what the refs are called - it is that no ref reaches a commit outside the base's history.
+checkout="${BEAD_COST_CHECKOUT:-}"
+if [ -z "$checkout" ]; then
+    bad "set BEAD_COST_CHECKOUT=<run-checkout> - the isolation gates have nothing to check without it"
+elif ! git -C "$checkout" rev-parse --git-dir >/dev/null 2>&1; then
+    bad "$checkout is not a git repository"
 else
-    bad "archeion not found at $archeion"
+    all_commits=$(git -C "$checkout" rev-list --all | wc -l)
+    head_commits=$(git -C "$checkout" rev-list HEAD | wc -l)
+    if [ "$all_commits" -eq "$head_commits" ]; then
+        pass "every ref stays inside the base history ($head_commits commits, no foreign ref)"
+    else
+        bad "$((all_commits - head_commits)) commit(s) are reachable outside HEAD's history - a sibling run's work is visible here"
+        git -C "$checkout" log --all --not HEAD --oneline | head -5 >&2
+    fi
+    if [ -n "$(git -C "$checkout" tag)" ]; then
+        bad "the checkout carries tags - a tag is a ref too, and git log --all walks it"
+    else
+        pass "no tags"
+    fi
+    # The bead must still be open. A fixed base means there is nothing left to measure, and every
+    # run would be scored against a tree that already passes.
+    if git -C "$checkout" log --oneline -20 | grep -qi "arch-42q"; then
+        bad "a commit mentioning arch-42q is in the checkout's history - the subject may already be fixed"
+    else
+        pass "no arch-42q fix in the base history"
+    fi
+    pass "base commit $(git -C "$checkout" rev-parse --short HEAD)"
+fi
+
+echo "==> what the run sees, asked THROUGH THE JAIL rather than from this shell"
+# The host can obviously read its own files; the only question that matters is what the run sees,
+# and an earlier draft of this script asked the first question and would have passed a sandbox that
+# leaked. Every probe below runs the way the run itself is launched - same jail, same HOME - because
+# a gate that tests a configuration the run does not use is a gate that reports on nothing. That is
+# not hypothetical either: this file used to check the notes through `ai-jail` while the runs were
+# launched outside it entirely, so the one contamination vector it named was never actually closed.
+notes="$HOME/repositories/project-notes/llm-workflow"
+if [ -z "$checkout" ]; then
+    bad "BEAD_COST_CHECKOUT is unset, so nothing below can be asked through the jail"
+elif [ ! -f "$checkout/.ai-jail" ]; then
+    bad "$checkout has no .ai-jail - run harden-worktree.sh, or the default rw_maps mounts all of ~/repositories"
+elif ! command -v ai-jail >/dev/null 2>&1; then
+    bad "ai-jail is not on PATH, so none of the checks that matter can be made"
+else
+    # HOME is overridden for the command INSIDE the jail, never for ai-jail itself. ai-jail decides
+    # what to bind by enumerating the dotdirs of the HOME it is launched with, so handing it the
+    # run's HOME makes it mount that instead of the machine's - and the run then has no ~/.cargo and
+    # no mise, which is how the first draft of this check reported "0 crates reachable" and "the
+    # model is not known inside the jail" about a sandbox whose only defect was this line. The same
+    # two symptoms the pilot burned a run on, produced this time by the checker rather than the
+    # sandbox.
+    jail() { (cd "$checkout" && ai-jail --exec --no-save-config -- env HOME="$run_home" "$@"); }
+
+    if [ ! -d "$notes" ]; then
+        pass "project-notes/llm-workflow is not present on this machine"
+    elif jail ls "$notes" >/dev/null 2>&1; then
+        bad "a jailed process READ project-notes/llm-workflow - a run can be handed the rubric and the answer key"
+    else
+        pass "a jailed process cannot read project-notes/llm-workflow"
+    fi
+
+    # The sibling runs, on the filesystem rather than through git. Each run directory holds another
+    # lane's checkout and its session log; mapping the shared parent would hand a run its siblings
+    # by a different road than the one the ref-namespace gate above closes.
+    # Single-quoted on purpose: `$0` has to be expanded by the shell INSIDE the jail, against the
+    # path passed to it, not by this one before the jail exists.
+    # shellcheck disable=SC2016
+    siblings=$(jail sh -c 'ls "$0" 2>/dev/null' "$root" | grep -vxF "$(basename "$run_home_dir")" | grep -vxF "_base.git" || true)
+    if [ -n "$siblings" ]; then
+        bad "a jailed process can list other runs under $root:"
+        printf '%s\n' "$siblings" | sed 's/^/        /' >&2
+    else
+        pass "no other run directory is visible from inside the jail"
+    fi
+
+    # /mnt/build is where the subject's own gate builds: bin/ci sets CARGO_TARGET_DIR there when the
+    # caller has not. A run that cannot write it fails to build for a reason that is not the bead.
+    if jail sh -c 'touch /mnt/build/.bead-cost-verify && rm -f /mnt/build/.bead-cost-verify' 2>/dev/null; then
+        pass "/mnt/build is writable inside the jail (bin/ci builds there)"
+    else
+        bad "/mnt/build is not writable inside the jail - bin/ci will fail for a reason that is not the bead"
+    fi
+
+    # Asserted on the crate count rather than on the mount, for the reason the host-side check is:
+    # a linked but cold cache passes every structural test and still costs the run a full download.
+    # Single-quoted for the same reason: `$HOME` is the run's HOME as the jail sees it.
+    # shellcheck disable=SC2016
+    jailed_crates=$(jail sh -c 'find -L "$HOME/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l' || echo 0)
+    if [ "${jailed_crates:-0}" -gt 100 ]; then
+        pass "the crate cache is reachable inside the jail ($jailed_crates crates)"
+    else
+        bad "only ${jailed_crates:-0} crates reachable inside the jail - the run will re-download the world"
+    fi
+
+    # `bin/worktree new` is the first thing the global instruction files tell an agent to do, and it
+    # opens with `git fetch origin`. Without a reachable origin it aborts, and the run then works in
+    # a way no ordinary session would.
+    if jail git ls-remote origin >/dev/null 2>&1; then
+        pass "origin is reachable inside the jail (bin/worktree new can fetch)"
+    else
+        bad "origin is unreachable inside the jail - bin/worktree new will abort before the run starts"
+    fi
+
+    # Asked of the lane that will actually run it. The first draft asked pi's catalog whatever the
+    # lane was, so the agy lane failed this gate for a model pi was never going to be given - a gate
+    # reporting on a question nobody asked, which is the same class of mistake as checking the jail
+    # while launching outside it.
+    #
+    # For agy this is also the cheapest possible auth check: `agy models` needs a working login and
+    # no completion, so a lane whose credentials did not come across fails here instead of failing
+    # in seconds once the run has started and the operator has walked away.
+    if [ -n "${BEAD_COST_MODEL:-}" ]; then
+        case "${BEAD_COST_LANE:-pi}" in
+            agy) lane_models=$(jail agy models 2>/dev/null || true) ;;
+            *)   lane_models=$(jail pi --list-models 2>/dev/null || true) ;;
+        esac
+        if printf '%s\n' "$lane_models" | grep -qF "${BEAD_COST_MODEL#litellm/}"; then
+            pass "$BEAD_COST_MODEL is known to the ${BEAD_COST_LANE:-pi} lane inside the jail"
+        else
+            bad "$BEAD_COST_MODEL is NOT known to the ${BEAD_COST_LANE:-pi} lane inside the jail - catalog or credentials did not come across"
+        fi
+    fi
 fi
 
 echo
