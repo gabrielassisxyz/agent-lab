@@ -67,17 +67,12 @@ def classify(run_dir: pathlib.Path) -> str:
     verdict = read_json(run_dir / "verdict.json")
     record = read_json(run_dir / "record.json")
 
-    # Reachability is decided first and from the raw streams, because a lane that never answered
-    # can still leave a scored verdict behind: the scorer grades the base tree regardless.
-    blob = ""
-    for name in ("stderr.txt", "stdout.txt"):
-        try:
-            blob += (run_dir / name).read_text(errors="replace")
-        except OSError:
-            pass
-    if UNREACHABLE.search(blob):
-        return "unreachable"
-
+    # What the run PRODUCED is decided before why it might not have, and the order is a correction.
+    # Reachability used to be checked first, against the raw streams, which reads any mention of a
+    # rate limit as the lane being unusable. A run of 474 turns over 68 minutes that survived a
+    # transient 429, committed a fix and scored five of five was classified `unreachable` on that
+    # basis, and cost its lane a rest round. A run that produced work was reachable, whatever its
+    # logs mention along the way.
     if verdict and verdict.get("scored"):
         section = verdict.get("section_a") or {}
         if section and all(section.values()):
@@ -86,6 +81,16 @@ def classify(run_dir: pathlib.Path) -> str:
     worktree = (record or {}).get("worktree") or {}
     if worktree.get("committed") or worktree.get("dirty"):
         return "wrong"
+
+    # Only now, with nothing produced, does the reason matter.
+    blob = ""
+    for name in ("stderr.txt", "stdout.txt"):
+        try:
+            blob += (run_dir / name).read_text(errors="replace")
+        except OSError:
+            pass
+    if UNREACHABLE.search(blob):
+        return "unreachable"
 
     if record is not None:
         if last_stop_reason(record) == "length":
