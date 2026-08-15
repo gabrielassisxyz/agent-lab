@@ -25,7 +25,7 @@ Subject: `archeion` bead `arch-42q`, base `6edbb8e`. Byte-identical prompt acros
 | outcome | **completed**, admitted | **failed run**, produced nothing |
 | wall clock | 11 min 24 s | 7 min 54 s |
 | harness-reported duration | 679.2 s | not reported by this harness |
-| turns | 1 (agy counts its own retries) | 39 |
+| turns | 132, read from the trajectory database; the envelope reports 1, counting agy's own retries | 39 |
 | commit | `cc697df` | none; tree left at base |
 | canonical verification | **5/5** | a1 only, which is the unmodified base signature |
 | full suite | 501 passed, 0 failed | not applicable |
@@ -41,6 +41,12 @@ Three things follow, and none of them is "the model got the bead wrong":
 - **It never produced an answer to be wrong about.** `score.sh` grades whatever tree it is handed, and an untouched base tree scores exactly like a wrong fix. What separates them is the record's `worktree` block: `committed: false`, `dirty: false`, head equal to the base commit.
 - **The ceiling is the deployment's, not the catalog's.** `models.json` declares `maxTokens: 32000` for this lane and the observed cut was 65 536.
 - **The thinking flag does not govern it.** pi recorded `thinkingLevel: "off"` for the session and the model produced 70 168 reasoning tokens across the run.
+
+#### Why no limit was applied, which is the part that decides whether the lane is fixable
+
+The output limit this harness asks for never arrives. `pi` sends `max_completion_tokens`, and that field is silently ignored on the path to Ollama Cloud, so nothing constrains the response and the model runs until it meets the provider's own hard ceiling of 65 536 - which is what the observed cut is, and why it does not match the 32 000 the catalog declares. The proxy compounds it by forcing `reasoning_effort: max` on this lane, so the tokens the run has to spend before it can answer are maximised at the same time as the budget for answering is unbounded.
+
+**Raising the limit is therefore not an available move.** The ceiling belongs to the provider, and the parameter that would stay under it is discarded before it gets there. Anything that makes this lane viable has to change what is sent or where it is sent, and until one of those is established the lane produces failed runs rather than data.
 
 ### Usage, and why the two columns must not be compared
 
