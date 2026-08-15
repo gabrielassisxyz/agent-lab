@@ -26,7 +26,9 @@
       "357MB crates + 172MB npm re-downloaded inside the measured hour",
       "wall clock spans three invocations plus a probe turn injected by the operator",
       "two rate-limit kills"
-    ]
+    ],
+    "discarded": true,
+    "discarded_because": "pilot round; ran before the ref-namespace and jail leaks were closed, and the agy lane ran unauthenticated for Antigravity. See round-2.md."
   },
   "gemini-3.7-flash-medium-via-agy": {
     "lane": "gemini-3.7-flash-medium",
@@ -57,6 +59,102 @@
     "cost_invalid_because": [
       "ran in the same environment whose defects invalidated the other lane",
       "cache accounting is not comparable across lanes: this meter reports cache reads, the other does not"
+    ],
+    "discarded": true,
+    "discarded_because": "pilot round; ran before the ref-namespace and jail leaks were closed, and the agy lane ran unauthenticated for Antigravity. See round-2.md."
+  },
+  "gemini-3.7-flash-medium-via-agy-round2": {
+    "run": "agy-flash-02",
+    "lane": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "base_commit": "6edbb8e",
+    "invocations": 1,
+    "wall_clock_seconds": 684,
+    "harness_duration_seconds": 679.159458339,
+    "wall_clock_note": "build warmed before the clock; still contains any upstream backoff",
+    "killed_by": [
+      null
+    ],
+    "commit": "cc697df",
+    "section_a": {
+      "a1": true,
+      "a2": true,
+      "a3": true,
+      "a4": true,
+      "a5": true
+    },
+    "admitted": true,
+    "suite": {
+      "passed": 501,
+      "failed": 0
+    },
+    "diff": {
+      "files": 4,
+      "added": 63,
+      "removed": 26
+    },
+    "new_dependency": null,
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 772536,
+      "output_tokens": 76308,
+      "thinking_tokens": 48764,
+      "cache_read_tokens": 16103935
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope totals are not comparable with a per-turn sum from the other harness",
+      "one completed run is not a cost per completed bead; the denominator is 1"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-round2": {
+    "run": "deepseek-max-01",
+    "lane": "litellm/deepseek-v4-pro-max-k1",
+    "harness": "pi",
+    "base_commit": "6edbb8e",
+    "invocations": 1,
+    "wall_clock_seconds": 474,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      "output ceiling: stopReason length on turn 38"
+    ],
+    "commit": null,
+    "section_a": {
+      "a1": true,
+      "a2": false,
+      "a3": false,
+      "a4": false,
+      "a5": false
+    },
+    "section_a_note": "this is the unmodified base signature; the run left no diff, so the scorer graded the base tree",
+    "admitted": false,
+    "completed": false,
+    "failed_run_because": "killed by the lane's output ceiling, not a wrong answer",
+    "diff": {
+      "files": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 39,
+      "input_tokens": 2342485,
+      "output_tokens": 82307,
+      "reasoning_tokens": 70168,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero",
+      "final_turn": {
+        "output_tokens": 65536,
+        "reasoning_tokens": 61104,
+        "stop_reason": "length"
+      },
+      "thinking_level_requested": "off"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "counts in the numerator of cost per completed bead and not in the denominator",
+      "per-turn input sum counts the whole prompt every turn"
     ]
   }
 }

@@ -1,5 +1,7 @@
 # bead-cost pilot, 2026-08-14
 
+> **Discarded, and superseded by [`round-2.md`](round-2.md).** Everything below stands as written and none of its cost figures may be quoted. Two contamination vectors were still open while this ran, both closed since: a run could list every other run's branches and read their commit subjects, which name the fix; and the rubric and the canonical verification were readable from inside a run, because the check for that was made through a jail the runs were never launched in. The agy lane also ran without the credential Antigravity actually authenticates with. The trees named in `FROZEN.md` are still the evidence for what was produced and are still not to be swept.
+
 One agent, one run, checked to exhaustion before anything runs in parallel. Two lanes ended up being run rather than one, which was not the plan and turned out to be the most useful part.
 
 **Read this first, before any number below is quoted anywhere: the pilot did not measure the models. It measured the environment, found five defects in it, and every cost figure it produced is void.** That is a successful pilot, not a failed one, and it is exactly what the protocol exists to buy before 45 runs are spent.
