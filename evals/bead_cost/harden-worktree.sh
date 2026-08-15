@@ -40,8 +40,16 @@ root="${BEAD_COST_ROOT:-$HOME/tmp/bead-cost}"
 run_dir="${2:-$checkout}"
 base_repo="${3:-$root/_base-$(basename "${BEAD_COST_SUBJECT:-$HOME/repositories/archeion}").git}"
 
-ro_line=""
-[ -d "$base_repo" ] && ro_line="\"$base_repo\""
+ro_maps=()
+[ -d "$base_repo" ] && ro_maps+=("\"$base_repo\"")
+# Go's module cache, when the machine has one. It has to be named here because ai-jail binds the
+# DOTDIRS of the launching HOME, and `~/go` is not one - so the sandbox's symlink to it dangles, and
+# the failure reads `go: could not create module cache: … file exists`, which sounds like a
+# permissions or leftover-directory problem and is neither. Read-only: at 9.8 GB it cannot be copied
+# per run, and the alternative to mounting it is every run re-downloading its dependencies through a
+# jail that deliberately has no route to the internet.
+[ -d "$HOME/go/pkg/mod" ] && ro_maps+=("\"$HOME/go/pkg/mod\"")
+ro_line=$(IFS=, ; echo "${ro_maps[*]}")
 
 cat > "$checkout/.ai-jail" <<EOF
 # Written by evals/bead_cost/harden-worktree.sh. Not part of the subject repository.
