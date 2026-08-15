@@ -1,5 +1,7 @@
 # bead-cost round 2, 2026-08-14
 
+> **Every `section_a` verdict on this page is void.** Measured the following night: the canonical verification returns the same answer for a tree carrying a complete fix and for an untouched base tree, so nothing below that reads admitted, five of five or two of five is evidence of anything. The wall clocks, token counts, diffs and trajectories are unaffected and re-scorable. See [`instrument-void-2026-08-15.md`](instrument-void-2026-08-15.md).
+
 The pilot beside this file is **discarded**: its cost figures were void for the five environment defects recorded there, and the two vectors that would have voided everything after it were still open when it ended. This round is the first run of the instrument with those closed.
 
 **Two lanes, one completed.** The agy lane produced a solution that passes the admission gate. The deepseek lane produced nothing, killed by its own output ceiling in under eight minutes, and is a failed run rather than a wrong answer.
