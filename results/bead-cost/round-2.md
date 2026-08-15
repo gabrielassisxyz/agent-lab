@@ -1,6 +1,6 @@
 # bead-cost round 2, 2026-08-14
 
-> **Every `section_a` verdict on this page is void.** Measured the following night: the canonical verification returns the same answer for a tree carrying a complete fix and for an untouched base tree, so nothing below that reads admitted, five of five or two of five is evidence of anything. The wall clocks, token counts, diffs and trajectories are unaffected and re-scorable. See [`instrument-void-2026-08-15.md`](instrument-void-2026-08-15.md).
+> **The verdicts below were re-derived and they stand.** For about two hours the following night the harness could not be trusted to produce them, for two contaminations that overlapped: a scoring build directory shared across identical clones, and a run that patched the `spider` crate in the machine's cargo registry and thereby fixed the subject bead for every later build. Both are closed, and everything on this page was re-scored from artefacts already on disk. The story is worth reading before trusting any verdict recorded that night: [`instrument-void-2026-08-15.md`](instrument-void-2026-08-15.md).
 
 The pilot beside this file is **discarded**: its cost figures were void for the five environment defects recorded there, and the two vectors that would have voided everything after it were still open when it ended. This round is the first run of the instrument with those closed.
 

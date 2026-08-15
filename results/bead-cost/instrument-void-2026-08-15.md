@@ -1,48 +1,64 @@
-# The canonical verification does not discriminate
+# The night the verdicts were void, and why
 
-**Every verdict this harness has produced is void.** Not wrong in one direction, not noisy: the check returns the same answer for a tree carrying a complete fix and a tree that was never touched. Read this before quoting any `section_a` from any run, including the ones in `round-2.md`.
+**Resolved.** The canonical verification works and discriminates. Two separate contaminations overlapped in time, and between them they made a working instrument look broken. Both are closed, every affected run has been re-scored from artefacts already on disk, and no run had to be paid for twice.
 
-The runs themselves are **not** void. Their diffs, trajectories and token counts are real and re-scorable the moment the check works again, which is the whole reason this experiment keeps raw artefacts instead of summaries.
+Read this before quoting any verdict recorded between 2026-08-14 23:00 and 2026-08-15 01:00.
 
-## The measurement
-
-Four trees, one scorer, per-tree build directories:
+## What the instrument does when nothing is contaminating it
 
 | tree | carries the fix? | verdict |
 |---|---|---|
-| `probe-iso-03/archeion` | no, untouched base `6edbb8e` | **5/5** |
-| `deepseek-max-01/archeion` | no, untouched base | **5/5** |
-| `glm52-02/archeion` | no, untouched base | **5/5** |
-| `agy-flash-02/archeion-arch-42q` | yes, complete, suite green | **5/5** |
+| untouched base `6edbb8e` | no | `a1 true`, a2-a5 false |
+| `agy-flash-02` | yes, complete | `5/5` |
 
-The same four under one shared build directory return `a1 true, a2 false, a3 true, a4 false, a5 false` - base trees and fixed tree alike, stable across four repetitions of the same tree.
+The first row reproduces exactly what the pilot recorded for this commit. The instrument was never the problem.
 
-So the build directory decides *which* uniform answer comes out. It does not decide whether the check can tell a fix from its absence, and in neither condition can it.
+## Contamination 1: one build directory, many identical clones
 
-Neither answer matches what the pilot recorded for this base commit either, which was `a1 true` and the remaining four false. That signature no longer reproduces under any configuration tried.
+The scorer built every tree in a single cargo target directory. Every run is a clone of the same repository, so every tree hands cargo the same package name and version, and the fixture reaches the crawler through `env!("CARGO_BIN_EXE_archeion")` - one path inside that directory. One tree's binary was therefore driven by another tree's test.
 
-## The defect that was found on the way, and is real but not this
+Measured on one unchanged tree: the shared directory returned `a1 true, a2 false, a3 true, a4 false, a5 false`, stable across four repetitions, while a private directory returned all five true. **Fixed by giving the scorer a directory per tree.**
 
-The scorer built every tree in one shared cargo target directory. Every run is a clone of the same repository, so every tree hands cargo the same package name and version, and the fixture drives the crawler through `env!("CARGO_BIN_EXE_archeion")` - a single path inside that directory. One tree's binary was being driven by another tree's test.
+## Contamination 2: a run patched its dependency, for the whole machine
 
-That is fixed, per-tree directories are correct, and it changes nothing about the paragraph above. It is recorded here because it is exactly the kind of finding that looks like the answer and closes an investigation early: it is a genuine contamination, it produces a stable wrong verdict, and the wrong verdict it produces is the *plausible* one - the numeric spellings failing is the documented wrong answer for this bead, so it invites being believed.
+The bead says the fix belongs "at whatever reads the engine's `page_links` for its href text before a URL is built from it". That layer lives inside the `spider` crate, not inside the repository. A run followed the instruction to where it led and patched the crate: nine write calls into `~/.cargo/registry/src/…/spider-2.52.13/`, adding `html-escape` to its manifest and a character-reference decoder to its `push_link`.
 
-## Why this was not caught earlier tonight
+It is a defensible reading of the task, and it was catastrophic. Every build on this machine afterwards - including the scorer's - linked a `spider` that already solved the subject, so an untouched base tree began passing the canonical verification. **Nothing about it appears in the diff being graded.**
 
-It was caught by the procedure that exists for it, later than it should have been.
+The sandbox had allowed exactly this in writing, on reasoning that covered the wrong case: a run may write into the shared cache, because all it can add is a crate it downloaded, and a downloaded dependency carries nothing about the bead. True of downloads. False of edits.
 
-The first scoring of `agy-flash-02` returned 5/5 and was reported as an admitted run. A re-score of the same commit, hours later, returned 2/5. The obvious reading was run-to-run instability in the crawl, and the manual says a verdict that moves between identical runs is an instrument defect rather than a finding, so it was measured: four repetitions, all 2/5, stable. Stability then looked like proof that the 2/5 was real and the earlier 5/5 was the anomaly - and a story was built on it, that the same model had produced a correct fix and a wrong one from an identical prompt.
+**Fixed by splitting cargo's home along what is actually immutable.** The `.crate` files and the index stay shared, because re-fetching them is the 357 MB tax the arrangement exists to avoid. The extracted sources become private per run, because they are ordinary writable files. Cargo repopulates them from the shared cache without touching the network: 1m39s for 314 crates, inside the warm-up and outside the measured window. It also removes the extraction race between concurrent runs structurally rather than by lock.
 
-That story was wrong. What the four stable repetitions actually proved was that the *contamination* was stable. The step that broke it open was the negative control the manual asks for first and which had not been run: score a pristine base tree and check the instrument is capable of failing. It was not.
+## What the runs actually did
 
-**A stable answer is not a correct one, and the check that separates them is the control, not the repetition.**
+Re-scored against a pristine dependency, in a build directory of their own.
 
-## What has to be decided before any of this is scored again
+| run | lane | verdict | reading |
+|---|---|---|---|
+| `agy-flash-02` | gemini-3.7-flash-medium | **5/5** | correct fix, decoded before the URL is built |
+| `agyflash-01` | gemini-3.7-flash-medium | 2/5 | decoded in `set_on_link_find`, which receives an already-parsed URL |
+| `agyflash-02` | gemini-3.7-flash-medium | 2/5 | same architecture as above |
+| `kimi27-02` | kimi-k2.7 | **5/5** | repo fix stands on its own against a pristine crate |
+| `glm52-02` | glm-5.2 | no diff | stopped after 99 turns to argue the bead cannot be satisfied as written |
+| `deepseek-max-01` | deepseek-v4-pro-max | no diff | killed by the lane's output ceiling |
+| `agyflash-01b`, `kimi27-01b`, `glm52-01b` | all three | base signature | **void**: developed inside the poisoned window |
 
-- **Whether the fixture can discriminate at all in its current form**, on a tree built from a clone rather than the worktree it was authored against. The pilot proved it in both directions on 2026-08-14; that proof does not reproduce here, and the difference between the two situations is the run environment this repository changed in between.
-- **Whether `CARGO_BIN_EXE` is the right way for the fixture to reach the crawler**, given that the thing being graded is one of many identical clones.
-- **Whether the base signature the pilot recorded is still the truth about the base**, or whether the fixture drifted. The vendored copy here and the canonical copy in the design notes are byte-identical, so the drift, if any, is not in the file.
+The last row is the clearest evidence of contamination 2. All three committed work, and all three reduce to the untouched base when built against a pristine crate: they watched their own tests pass against a dependency that was already fixed.
 
-## What is still running
+`kimi27-02` is the run that patched the crate. Its committed diff passes on its own merits, so its verdict stands, but its turns and tokens include the work it spent inside the dependency and are not comparable with a run that never went there.
 
-The sweep continues. It collects runs, and the summary marks every verdict `void-scorer`. Collecting is worth doing because the expensive half - the model's work, its trajectory and its diff - is unaffected by a broken scorer and can be graded later. Nothing about the scores is worth reading until the control passes.
+## The two-hour detour, because the reasoning is the transferable part
+
+The first score of `agy-flash-02` was 5/5. A re-score hours later returned 2/5. A verdict that moves between identical runs is an instrument defect rather than a finding, and the manual says to test that by repeating, so it was repeated four times. All four agreed on 2/5.
+
+**Stability then read as proof**, and a story was built on it: the same model producing a correct fix and a wrong one from an identical prompt, and the earlier 5/5 dismissed as the anomaly. What the four repetitions actually proved was that contamination 1 was stable.
+
+The step that broke it open is the one the diagnostic ladder puts first and which had been skipped: score a pristine base tree and confirm the check is capable of failing. It was not. That pointed at contamination 2, which pointed back at contamination 1 having been only half the story.
+
+Both the original claim and its retraction were wrong, in opposite directions, for the same reason: **a stable answer is not a correct one, and what separates them is the control, not the repetition.** The variance between the agy runs is real, and it was visible before any of this - it just could not be trusted until the controls passed.
+
+## What the gates check now
+
+- The scorer's build directory is derived per tree.
+- `registry/src` must be private and must not be a symlink; `registry/cache` and `registry/index` must be shared. Both halves are asserted, because each is silent when wrong in its own direction.
+- The crate count is read with `find -L`, since `cache` became the final path component and a terminal symlink is not descended into - which reads as a cold cache rather than as a check looking at the link instead of through it.
