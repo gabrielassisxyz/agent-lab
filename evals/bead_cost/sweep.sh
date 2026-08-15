@@ -107,8 +107,21 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
             model_for_round="${model}${keysuffix}${slot}"
         fi
 
-        run_id=$(printf '%s-%02d' "$name" "$round")
-        [ -d "$root/$run_id" ] && run_id="${run_id}b"
+        # Numbered from what is already on disk, not from this process's round counter. The counter
+        # restarts at 1 on every relaunch, and the old collision handling appended a single `b`,
+        # which collides again on the third attempt. The result was rounds that refused instantly,
+        # each one still costing the lane a strike, so three lanes rested for failures that were
+        # nothing but a repeated id.
+        next=1
+        for existing in "$root/$name"-*; do
+            [ -d "$existing" ] || continue
+            suffix="${existing##*-}"
+            case "$suffix" in
+                ''|*[!0-9]*) continue ;;
+                *) [ "$((10#$suffix))" -ge "$next" ] && next=$((10#$suffix + 1)) ;;
+            esac
+        done
+        run_id=$(printf '%s-%02d' "$name" "$next")
 
         log "launching $run_id  ($harness, $model_for_round)"
         CARGO_TARGET_DIR="/mnt/build/cargo-target-bead-cost/gen${BEAD_COST_BUILD_GEN:-2}/lane-$name" \
