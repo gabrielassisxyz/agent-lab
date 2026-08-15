@@ -148,6 +148,25 @@ if [ -f "$run_home/.pi/agent/mcp.json" ]; then
     fi
 fi
 
+echo "==> there is room to build (a full disk fails a run in a way that blames the model)"
+# Added after /mnt/build went from 141 GB free to zero in six hours and took a sweep with it. Every
+# run gets a build directory per lane and every scored tree gets one of its own, at roughly 4.5 GB
+# each, so a night of runs is tens of gigabytes and the growth is invisible until it is not.
+#
+# What it costs when unchecked is worse than the space: the runs did not stop, they failed instantly
+# and in a loop, each one burning a run id and a strike, so the log filled with lanes resting for
+# three consecutive failures that were all one full filesystem. A gate here turns that into a
+# refusal to start.
+build_root="${BEAD_COST_BUILD_ROOT:-/mnt/build}"
+build_free_gb=$(df -BG --output=avail "$build_root" 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ -z "$build_free_gb" ]; then
+    bad "cannot read free space on $build_root"
+elif [ "$build_free_gb" -lt "${BEAD_COST_MIN_FREE_GB:-20}" ]; then
+    bad "$build_root has only ${build_free_gb}G free - a run needs room for a lane build and a scoring build"
+else
+    pass "$build_root has ${build_free_gb}G free"
+fi
+
 echo "==> the checkout has a ref namespace of its own (no run can read another run's answer)"
 # THE gate this experiment was missing, and the reason the pilot's successors would have been void.
 # Runs used to be linked worktrees of the shared subject repository, which share one ref namespace,
