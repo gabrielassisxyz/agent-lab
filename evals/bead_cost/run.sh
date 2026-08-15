@@ -167,7 +167,12 @@ date -Iseconds > "$run_dir/ended_at"
 say "run finished with exit $code"
 
 say "scoring"
-"$here/score.sh" "$checkout" "$run_id" "$run_dir" | tee "$run_dir/verdict.json"
+# CARGO_TARGET_DIR is deliberately dropped here. The scorer keeps its own build directory so it
+# never warms, or is warmed by, a run's build - and this script exports one for the run, which
+# `score.sh` would otherwise inherit through its own `${CARGO_TARGET_DIR:-...}` default. Harmless
+# for a single run and not harmless for a sweep, where several runs share one directory per slot
+# and the scoring build would start landing in it.
+env -u CARGO_TARGET_DIR "$here/score.sh" "$checkout" "$run_id" "$run_dir" | tee "$run_dir/verdict.json"
 "$here/collect.py" "$run_dir" --worktree "$("$here/find-work.sh" "$checkout" "$run_dir")" \
     > "$run_dir/record.json" || true
 cat "$run_dir/record.json" 2>/dev/null || true
