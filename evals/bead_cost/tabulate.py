@@ -121,7 +121,13 @@ def main() -> int:
 
     for model in sorted({subject(r["model"]) for r in rows if r["model"]}):
         model_rows = [r for r in rows if r["model"] and subject(r["model"]) == model]
-        usable = [r for r in model_rows if r["outcome"] not in ("poisoned-window", "broken")]
+        # `usable` means the run says something about the model. A poisoned window, a lane that
+        # errored out mid-edit, a lane that was never reached and a run that never started all say
+        # something about the machine instead, and each one of them in the denominator reads as a
+        # model that failed. A model's OWN failure - a rejected fix, a refusal to implement - stays
+        # in, because someone has to pay for it twice.
+        instrument = ("poisoned-window", "broken", "aborted", "unreachable")
+        usable = [r for r in model_rows if r["outcome"] not in instrument]
         admitted = [r for r in usable if r["outcome"] == "admitted"]
         median_wall = sorted(r["wall_s"] for r in usable if r["wall_s"]) or [None]
         print(

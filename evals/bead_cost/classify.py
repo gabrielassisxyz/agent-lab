@@ -12,6 +12,7 @@ task it was never given.
     admitted     the canonical verification passed on every criterion
     wrong        the run left a diff and the verification rejected it
     no-diff      the run finished and left the tree at its base commit
+    aborted      the lane errored out mid-edit and the tree was never scored
     unreachable  the lane could not be reached: rate limit, quota, credentials, unknown model
     truncated    the model's last turn hit its output ceiling and the session ended
     broken       the run never got far enough to produce any of the above
@@ -80,6 +81,13 @@ def classify(run_dir: pathlib.Path) -> str:
 
     worktree = (record or {}).get("worktree") or {}
     if worktree.get("committed") or worktree.get("dirty"):
+        # An edit left behind by a lane that died is not an answer, and `wrong` is the expensive
+        # place to put it: cost per completed bead divides by the runs that completed, so a lane
+        # failure in the denominator is charged to the model as if it had produced a rejected fix.
+        # The distinction is not visible in the tree, which looks the same either way - it is the
+        # absence of a verdict beside a harness that reported its own error.
+        if not (verdict or {}).get("scored") and ((record or {}).get("usage") or {}).get("status") == "ERROR":
+            return "aborted"
         return "wrong"
 
     # Only now, with nothing produced, does the reason matter.
