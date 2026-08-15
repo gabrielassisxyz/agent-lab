@@ -27,14 +27,15 @@ deadline=$(awk -v now="$(date +%s)" -v h="$hours" 'BEGIN{printf "%d", now + h*36
 summary="$work/summary.tsv"
 [ -s "$summary" ] || printf 'round\trun\tlane\tmodel\texit\tadmitted\tcommitted\twall_s\tinput\toutput\toutcome\n' >> "$summary"
 
-# WARNING, and it governs how every row below is read. The canonical verification does not currently
-# discriminate: measured 2026-08-15, three untouched base trees and one tree carrying a complete fix
-# all returned the same verdict, and which verdict that is depends on the cargo target directory the
-# scorer builds in. So `admitted` and `outcome` are PROVISIONAL - the run happened, the diff and the
-# trajectory are real and re-scorable, and the verdict is not evidence of anything until the
-# instrument is repaired. The sweep keeps collecting because raw artefacts are what let a metric be
-# repaired without paying for the runs again; it does not keep collecting because the scores mean
-# something.
+# A warning stood here saying every verdict below was PROVISIONAL, because the canonical
+# verification had stopped discriminating: three untouched base trees and one carrying a complete
+# fix all scored alike. Both causes were found and closed the same day - one build directory shared
+# by identical clones, and a run that patched the `spider` crate in the machine's cargo registry and
+# thereby fixed the subject for every later build. Every affected run was re-scored from artefacts
+# already on disk, so no run was paid for twice. The account is in
+# `results/bead-cost/instrument-void-2026-08-15.md`, and it is worth reading before trusting any
+# verdict recorded between 2026-08-14 23:00 and 2026-08-15 01:00. Rows outside that window are
+# ordinary measurements.
 
 # The roster. One entry per lane, and the account key is rotated per round rather than fixed: the
 # limit on the Ollama lanes is a request RATE PER ACCOUNT, so two lanes running at once must sit on
