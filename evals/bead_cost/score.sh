@@ -7,7 +7,11 @@
 #
 # It answers section A of the rubric and nothing else. Sections B through F are read off the diff.
 #
-#   ./score.sh <run-worktree> [<run-id>]
+#   ./score.sh <launch-worktree> [<run-id>] [<run-dir>]
+#
+# <run-dir> is the run's directory (…/bead-cost/<run-id>), NOT its HOME. Pass it and the scorer
+# finds where the run actually left its work, which is not always where it was launched. Omit it
+# and the launch worktree is graded as given, which is only correct for a run you know stayed put.
 #
 # Prints one JSON object on stdout. Everything else goes to stderr, so the caller can collect 45 of
 # these into a file without filtering prose out of them.
@@ -40,11 +44,17 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/mnt/build/cargo-target-bead-cost-s
 cp "$here/fixtures/benchmark_arch_42q_verify.rs" \
    "$worktree/tests/benchmark_arch_42q_verify.rs"
 
+# The `cd` is checked on its own, and that is not style. Folded into the command substitution as
+# `cd … && cargo … || true`, a failure to enter the directory is swallowed by the same `|| true`
+# that is there to tolerate a failing test, `output` comes back empty, and the scorer reports "the
+# tree did not build" about a directory it never entered. Two different failures, one message.
+cd "$worktree" || { echo "score: cannot enter $worktree" >&2; exit 1; }
+
 # `|| true`: an unfixed tree fails this test, which is the expected outcome for most runs and not
 # an error in the scorer. The verdict comes from the printed line, never from the exit code - a
 # guard on the exit code is precisely the defect that made the first draft of this instrument fail
 # every run for a reason unrelated to what it measured.
-output=$(cd "$worktree" && cargo test --test benchmark_arch_42q_verify -- --nocapture 2>&1 || true)
+output=$(cargo test --test benchmark_arch_42q_verify -- --nocapture 2>&1) || true
 
 verdict=$(printf '%s\n' "$output" | grep -m1 '^ARCH42Q_VERDICT ' | cut -d' ' -f2- || true)
 targets=$(printf '%s\n' "$output" | grep -m1 '^ARCH42Q_TARGETS ' | cut -d' ' -f2- || true)
