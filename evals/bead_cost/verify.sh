@@ -202,7 +202,7 @@ else
     fi
     # The bead must still be open. A fixed base means there is nothing left to measure, and every
     # run would be scored against a tree that already passes.
-    if git -C "$checkout" log --oneline -20 | grep -qi "arch-42q"; then
+    if grep -qi "arch-42q" <<< "$(git -C "$checkout" log --oneline -20)"; then
         bad "a commit mentioning arch-42q is in the checkout's history - the subject may already be fixed"
     else
         pass "no arch-42q fix in the base history"
@@ -297,7 +297,14 @@ else
             agy) lane_models=$(jail agy models 2>/dev/null || true) ;;
             *)   lane_models=$(jail pi --list-models 2>/dev/null || true) ;;
         esac
-        if printf '%s\n' "$lane_models" | grep -qF "${BEAD_COST_MODEL#litellm/}"; then
+        # Matched in the shell, NOT through `… | grep -q`. Under `pipefail` that pipeline is a
+        # coin flip: `grep -q` exits on the first match while the writer still has most of a 36 KB
+        # catalogue to push, the writer takes SIGPIPE, and the pipeline reports 141 - so the gate
+        # says the model is missing from a catalogue that contains it. Measured on this gate,
+        # against a sandbox whose model demonstrably worked: 4 false rejections in 10 runs. It fails
+        # more often on a loaded machine, which is why it read for weeks as contention between
+        # concurrent runs and cost nine of them.
+        if [[ "$lane_models" == *"${BEAD_COST_MODEL#litellm/}"* ]]; then
             pass "$BEAD_COST_MODEL is known to the ${BEAD_COST_LANE:-pi} lane inside the jail"
         else
             bad "$BEAD_COST_MODEL is NOT known to the ${BEAD_COST_LANE:-pi} lane inside the jail - catalog or credentials did not come across"

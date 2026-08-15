@@ -102,7 +102,10 @@ if [ "${1:-}" = "--stdin" ]; then
     text="$(cat)"
     hits="$(printf '%s' "$text" | scan_emdash - "$label")"
     [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; fail=1; }
-    if printf '%s' "$text" | grep -qEi -- "$NAME_RE"; then
+    # A here-string, not a pipe: `grep -q` exits on its first match, and under `pipefail` the
+    # writer's SIGPIPE turns a HIT into a pipeline failure - so the check reads as "clean" exactly
+    # when the name IS present, which is the one case it exists for.
+    if grep -qEi -- "$NAME_RE" <<< "$text"; then
         echo "$label names the de-slopping tool, which must never appear in a public repo" >&2
         fail=1
     fi
@@ -210,7 +213,7 @@ done < <(target_files)
 
 # 3. the current branch name (best-effort; a detached HEAD, as in some CI, is skipped)
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
-if [ "$branch" != HEAD ] && printf '%s' "$branch" | grep -qEi -- "$NAME_RE"; then
+if [ "$branch" != HEAD ] && grep -qEi -- "$NAME_RE" <<< "$branch"; then
     echo "branch name '$branch' names the de-slopping tool" >&2
     fail=1
 fi
