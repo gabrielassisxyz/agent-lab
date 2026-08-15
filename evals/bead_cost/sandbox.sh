@@ -141,7 +141,22 @@ link_cache() {
 }
 
 link_cache ".rustup"
-link_cache ".npm"
+
+# npm gets the same split as cargo, and for the third time the same reason.
+#
+# `~/.npm` was linked whole, so every run's first `pi` invocation bootstrapped itself through npx
+# against one shared directory. Serializing the cold start helped and did not close it: a run that
+# is already MEASURING is past the lock and still touching that directory, so a new run's first pi
+# call races a running one's npm activity. It surfaces as `the model is NOT known inside the jail`
+# about a catalog that is present and readable a minute later, and it costs the lane a strike.
+#
+# `_cacache` is npm's content-addressed store - immutable by construction and the expensive half,
+# so it stays shared. Everything else under `~/.npm` is bookkeeping npm rewrites, so it becomes
+# private and two runs stop having anything to race over.
+if [ -d "$HOME/.npm" ]; then
+    mkdir -p "$run_home/.npm"
+    [ -d "$HOME/.npm/_cacache" ] && ln -s "$HOME/.npm/_cacache" "$run_home/.npm/_cacache"
+fi
 
 # ---------------------------------------------------------------------------
 # CARGO_HOME is the exception, and it is split rather than linked whole.

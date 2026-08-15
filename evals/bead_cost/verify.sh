@@ -85,15 +85,14 @@ echo "==> the toolchain caches are warm (an empty one is a tax the first run pay
 # 172 MB of npm packages, because the sandbox HOME hid the real caches. That time was then
 # indistinguishable from the model's own, and it produced `can't find crate` errors the agent
 # worked around instead of the bead.
-npm_cache=".npm"
-if [ ! -e "$HOME/$npm_cache" ]; then
-    pass "$npm_cache does not exist on this machine either"
-elif [ ! -e "$run_home/$npm_cache" ]; then
-    bad "$npm_cache is missing from the sandbox - this run will re-download the world"
-elif [ ! -L "$run_home/$npm_cache" ]; then
-    bad "$npm_cache is a real directory, not a link - the run is not sharing the warm cache"
+if [ ! -d "$HOME/.npm" ]; then
+    pass ".npm does not exist on this machine either"
+elif [ -L "$run_home/.npm" ]; then
+    bad ".npm is linked whole - a run's npm bookkeeping races every other run's"
+elif [ ! -L "$run_home/.npm/_cacache" ]; then
+    bad ".npm/_cacache is not shared - this run will re-download its packages"
 else
-    pass "$npm_cache -> $(readlink "$run_home/$npm_cache")"
+    pass ".npm is private with _cacache shared"
 fi
 
 # The cargo split, asserted in both directions, because getting either half wrong is silent and
