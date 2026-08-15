@@ -111,7 +111,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         [ -d "$root/$run_id" ] && run_id="${run_id}b"
 
         log "launching $run_id  ($harness, $model_for_round)"
-        CARGO_TARGET_DIR="/mnt/build/cargo-target-bead-cost/lane-$name" \
+        CARGO_TARGET_DIR="/mnt/build/cargo-target-bead-cost/gen${BEAD_COST_BUILD_GEN:-2}/lane-$name" \
             "$here/run.sh" "$run_id" "$harness" "$model_for_round" \
             >> "$work/$run_id.log" 2>&1 &
         started+=("$!|$run_id|$name|$harness|$model_for_round")
