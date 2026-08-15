@@ -88,7 +88,7 @@ echo "==> the toolchain caches are warm (an empty one is a tax the first run pay
 if [ ! -d "$HOME/.npm" ]; then
     pass ".npm does not exist on this machine either"
 elif [ -L "$run_home/.npm" ]; then
-    bad ".npm is linked whole - a run's npm bookkeeping races every other run's"
+    bad ".npm is linked whole - npm's bookkeeping is state and would carry across runs"
 elif [ ! -L "$run_home/.npm/_cacache" ]; then
     bad ".npm/_cacache is not shared - this run will re-download its packages"
 else

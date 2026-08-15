@@ -142,17 +142,21 @@ link_cache() {
 
 link_cache ".rustup"
 
-# npm gets the same split as cargo, and for the third time the same reason.
+# npm gets the same split as cargo, but NOT for the reason this comment used to give.
 #
-# `~/.npm` was linked whole, so every run's first `pi` invocation bootstrapped itself through npx
-# against one shared directory. Serializing the cold start helped and did not close it: a run that
-# is already MEASURING is past the lock and still touching that directory, so a new run's first pi
-# call races a running one's npm activity. It surfaces as `the model is NOT known inside the jail`
-# about a catalog that is present and readable a minute later, and it costs the lane a strike.
+# It claimed a race: `~/.npm` linked whole, a fresh sandbox's first `pi` bootstrapping through npx
+# against a directory another run was already using, surfacing as `the model is NOT known inside the
+# jail` about a catalog readable a minute later. The symptom was real and the cause was not. It was
+# `verify.sh` piping a large catalogue into `grep -q` under `pipefail` - the quiet grep exits on the
+# match, the writer takes SIGPIPE, and the gate reports the model missing BECAUSE it was found.
+# Measured at 4 false rejections in 10 runs, and worse on a loaded machine, which is what made a
+# check containing no concurrency look like contention between runs. The split below was written
+# twice against that phantom; `evals/test_pipefail_grep.py` holds the real defect.
 #
-# `_cacache` is npm's content-addressed store - immutable by construction and the expensive half,
-# so it stays shared. Everything else under `~/.npm` is bookkeeping npm rewrites, so it becomes
-# private and two runs stop having anything to race over.
+# The split stays, on the reason that was true all along and did not need a race: npm's bookkeeping
+# is STATE, and state is what this file isolates. `_cacache` is the content-addressed store,
+# immutable by construction and the expensive half, so it stays shared; everything else under
+# `~/.npm` is rewritten by npm as it goes, so it is private per run.
 if [ -d "$HOME/.npm" ]; then
     mkdir -p "$run_home/.npm"
     [ -d "$HOME/.npm/_cacache" ] && ln -s "$HOME/.npm/_cacache" "$run_home/.npm/_cacache"

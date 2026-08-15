@@ -89,22 +89,25 @@ fi
 cp "$shared_prompt" "$run_dir/prompt.txt"
 
 # ---------------------------------------------------------------------------
-# Everything from here to the end of the warm-up is serialized across concurrent runs, and both
-# halves of that are paid for by a real failure.
-#
-# The warm-up: every run symlinks the machine's single ~/.cargo, so two warming together both unpack
-# crate sources into one shared registry and the loser reads a tree the winner is still writing:
+# Everything from here to the end of the warm-up is serialized across concurrent runs, for the
+# warm-up's sake: every run symlinks the machine's single ~/.cargo, so two warming together both
+# unpack crate sources into one shared registry and the loser reads a tree the winner is still
+# writing:
 #
 #     error: couldn't read .../registry/src/.../memchr-2.8.3/src/lib.rs: No such file or directory
 #
-# The check: the first `pi` invocation in a fresh sandbox bootstraps itself through npx against the
-# same shared ~/.npm, and three of those starting within the same second made two lanes report
-# `the model is NOT known inside the jail` about catalogs that were correct and are readable a
-# minute later. Same failure shape, different cache, and it costs a whole round when the gate that
-# is supposed to protect a run is the thing that fails.
+# The verify step is inside the lock only because it sits between the two, and that is worth saying
+# plainly because this comment used to claim otherwise. It read: three fresh sandboxes bootstrapping
+# `pi` through npx within the same second made two lanes report `the model is NOT known inside the
+# jail` about catalogs that were correct a minute later - a second cold-start race, in npm rather
+# than cargo. **No such race exists.** That symptom was `verify.sh` piping a large catalogue into
+# `grep -q` under `pipefail`: the quiet grep exits on the match, the writer takes SIGPIPE, and the
+# gate reports the model missing precisely because it was found. It fails more often on a loaded
+# machine, which is exactly how a check with no concurrency in it comes to look like contention.
+# Two rewrites of the npm cache layout were aimed at that phantom before it was measured.
 #
-# Both are cold-start effects and both are outside the measured window, so serializing them costs
-# wall clock nobody is billed for. It is taken on a file descriptor rather than as
+# Serializing the warm-up is outside the measured window, so it costs wall clock nobody is billed
+# for. The lock is taken on a file descriptor rather than as
 # `flock <file> <command>` because what has to be serialized is a shell function that needs the
 # caller's exported environment.
 mkdir -p "$root"
