@@ -66,6 +66,13 @@ copy_constant "$HOME/.config/opencode/AGENTS.md"   ".config/opencode/AGENTS.md"
 for auth in oauth_creds.json google_accounts.json installation_id settings.json projects.json; do
     copy_constant "$HOME/.gemini/$auth" ".gemini/$auth"
 done
+# The agy lane's real credential, and it is NOT `oauth_creds.json`. That file is the Gemini CLI's
+# login; Antigravity keeps its own token one directory further down, and without it a run in an
+# overridden HOME comes back in seconds with `"status":"ERROR","error":"authentication failed or
+# timed out"` and its own log saying `You are not logged into Antigravity` - having spent nothing
+# and produced no data point. Copied like every other credential, because a symlink would let a
+# token refresh inside one run rewrite what every later run authenticates with.
+copy_constant "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ".gemini/antigravity-cli/antigravity-oauth-token"
 copy_constant "$HOME/.claude/.credentials.json" ".claude/.credentials.json"
 copy_constant "$HOME/.config/zsh/secrets"       ".config/zsh/secrets"
 copy_constant "$HOME/.config/gh"                ".config/gh"
