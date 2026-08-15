@@ -160,10 +160,18 @@ warmed=0
 # `cargo test --no-run` in a Go tree warms nothing, exits non-zero, and the run is rejected with a
 # message about a tree that does not build.
 if [ -f "$checkout/go.mod" ]; then
-    # `go build` alone leaves every test dependency cold, and the tests are what the scorer runs.
-    # `-run` with a pattern that matches nothing compiles them all and executes none, so the warm-up
-    # never runs a test whose result could be mistaken for a verdict.
-    jailed sh -c 'go build ./... && go test -run "^$" ./...' > "$run_dir/prewarm.log" 2>&1 || warmed=1
+    # Two commands with different standing, and the split is the bead's doing rather than caution.
+    #
+    # `go build ./...` MUST succeed: that is the claim this step exists to make, that a run which
+    # cannot build was handed a broken tree rather than a hard problem.
+    #
+    # Compiling the tests is best-effort, because on a bead whose canonical verification already
+    # sits in the base tree naming a contract nothing implements yet, one test package failing to
+    # compile IS the task. Requiring it would reject every run of exactly the bead being measured.
+    # `-run` with a pattern matching nothing compiles them and executes none, so nothing here can
+    # produce a result that looks like a verdict.
+    jailed go build ./... > "$run_dir/prewarm.log" 2>&1 || warmed=1
+    jailed go test -run '^$' ./... >> "$run_dir/prewarm.log" 2>&1 || true
 else
     jailed cargo test --no-run --quiet > "$run_dir/prewarm.log" 2>&1 || warmed=1
 fi
