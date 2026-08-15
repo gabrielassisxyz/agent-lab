@@ -293,8 +293,23 @@ else
     # no completion, so a lane whose credentials did not come across fails here instead of failing
     # in seconds once the run has started and the operator has walked away.
     if [ -n "${BEAD_COST_MODEL:-}" ]; then
+        needle="${BEAD_COST_MODEL#litellm/}"
+        subject="$BEAD_COST_MODEL"
         case "${BEAD_COST_LANE:-pi}" in
             agy) lane_models=$(jail agy models 2>/dev/null || true) ;;
+            # Claude Code has no catalogue that can be listed without spending a request, so this
+            # asks the question that CAN be answered for free and that fails silently when wrong:
+            # whether the account's token came across. `claude-as` with no arguments prints the
+            # accounts it holds tokens for and contacts nothing. It is the right question anyway -
+            # the wrapper refuses an unknown account rather than falling back to file-based auth, so
+            # a missing token is a run that never starts instead of one on the wrong account. Which
+            # model actually answered is recorded by the run's own envelope, a better witness than
+            # any pre-flight guess.
+            claude)
+                lane_models=$(jail claude-as 2>&1 || true)
+                needle="${BEAD_COST_CLAUDE_ACCOUNT:-primary}"
+                subject="the claude account '$needle'"
+                ;;
             *)   lane_models=$(jail pi --list-models 2>/dev/null || true) ;;
         esac
         # Matched in the shell, NOT through `… | grep -q`. Under `pipefail` that pipeline is a
@@ -304,10 +319,10 @@ else
         # against a sandbox whose model demonstrably worked: 4 false rejections in 10 runs. It fails
         # more often on a loaded machine, which is why it read for weeks as contention between
         # concurrent runs and cost nine of them.
-        if [[ "$lane_models" == *"${BEAD_COST_MODEL#litellm/}"* ]]; then
-            pass "$BEAD_COST_MODEL is known to the ${BEAD_COST_LANE:-pi} lane inside the jail"
+        if [[ "$lane_models" == *"$needle"* ]]; then
+            pass "$subject is known to the ${BEAD_COST_LANE:-pi} lane inside the jail"
         else
-            bad "$BEAD_COST_MODEL is NOT known to the ${BEAD_COST_LANE:-pi} lane inside the jail - catalog or credentials did not come across"
+            bad "$subject is NOT known to the ${BEAD_COST_LANE:-pi} lane inside the jail - catalog or credentials did not come across"
         fi
     fi
 fi
