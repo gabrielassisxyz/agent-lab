@@ -85,20 +85,45 @@ echo "==> the toolchain caches are warm (an empty one is a tax the first run pay
 # 172 MB of npm packages, because the sandbox HOME hid the real caches. That time was then
 # indistinguishable from the model's own, and it produced `can't find crate` errors the agent
 # worked around instead of the bead.
-for cache in .cargo .npm; do
-    if [ ! -e "$HOME/$cache" ]; then
-        pass "$cache does not exist on this machine either"
-    elif [ ! -e "$run_home/$cache" ]; then
-        bad "$cache is missing from the sandbox - this run will re-download the world"
-    elif [ ! -L "$run_home/$cache" ]; then
-        bad "$cache is a real directory, not a link - the run is not sharing the warm cache"
+npm_cache=".npm"
+if [ ! -e "$HOME/$npm_cache" ]; then
+    pass "$npm_cache does not exist on this machine either"
+elif [ ! -e "$run_home/$npm_cache" ]; then
+    bad "$npm_cache is missing from the sandbox - this run will re-download the world"
+elif [ ! -L "$run_home/$npm_cache" ]; then
+    bad "$npm_cache is a real directory, not a link - the run is not sharing the warm cache"
+else
+    pass "$npm_cache -> $(readlink "$run_home/$npm_cache")"
+fi
+
+# The cargo split, asserted in both directions, because getting either half wrong is silent and
+# expensive. A shared `src` lets a run edit its dependencies for everyone - which is how an
+# untouched base tree started passing the canonical verification, after a run patched `spider` to
+# fix the bead inside the crate. A private `cache` re-downloads 357 MB inside the measured hour.
+if [ -d "$HOME/.cargo" ]; then
+    if [ -L "$run_home/.cargo" ]; then
+        bad ".cargo is linked whole - a run can edit the machine's dependency sources for every later run"
+    elif [ ! -d "$run_home/.cargo/registry/src" ]; then
+        bad ".cargo/registry/src is missing - cargo has nowhere private to extract into"
+    elif [ -L "$run_home/.cargo/registry/src" ]; then
+        bad ".cargo/registry/src is a link to the shared sources - a run's edits would outlive it"
     else
-        pass "$cache -> $(readlink "$run_home/$cache")"
+        pass ".cargo/registry/src is private to this run"
     fi
-done
+    for shared in cache index; do
+        if [ -L "$run_home/.cargo/registry/$shared" ]; then
+            pass ".cargo/registry/$shared is shared (downloads are not re-paid)"
+        else
+            bad ".cargo/registry/$shared is not shared - this run will re-download the world"
+        fi
+    done
+fi
 # Asserted on the artifact rather than on the link: a symlink to an empty directory passes every
 # check above and still costs the run a full download.
-crates=$(find "$run_home/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l)
+# -L, because `cache` is now the final component of the path AND a symlink, and find does not
+# descend into a terminal symlink without it. Silent when wrong: the count comes back 0 and reads
+# as a cold cache rather than as a check looking at the link instead of through it.
+crates=$(find -L "$run_home/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l)
 if [ "$crates" -gt 100 ]; then
     pass "the crate cache is populated ($crates crates)"
 else
@@ -225,7 +250,7 @@ else
     # a linked but cold cache passes every structural test and still costs the run a full download.
     # Single-quoted for the same reason: `$HOME` is the run's HOME as the jail sees it.
     # shellcheck disable=SC2016
-    jailed_crates=$(jail sh -c 'find "$HOME/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l' || echo 0)
+    jailed_crates=$(jail sh -c 'find -L "$HOME/.cargo/registry/cache" -name "*.crate" 2>/dev/null | wc -l' || echo 0)
     if [ "${jailed_crates:-0}" -gt 100 ]; then
         pass "the crate cache is reachable inside the jail ($jailed_crates crates)"
     else

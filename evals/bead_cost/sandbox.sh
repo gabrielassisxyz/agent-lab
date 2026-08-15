@@ -140,9 +140,48 @@ link_cache() {
     ln -s "$real" "$run_home/$1"
 }
 
-link_cache ".cargo"
 link_cache ".rustup"
 link_cache ".npm"
+
+# ---------------------------------------------------------------------------
+# CARGO_HOME is the exception, and it is split rather than linked whole.
+#
+# The reasoning above allowed a run to write into the shared cache, on the grounds that the only
+# thing it can add is a crate it downloaded, and a downloaded dependency carries nothing about the
+# bead. That is true of downloads and false of EDITS, and the difference cost a night.
+#
+# On 2026-08-15 a run read the bead - which says the fix belongs "at whatever reads the engine's
+# `page_links` before a URL is built from it" - concluded correctly that this layer lives inside the
+# `spider` crate, and patched the crate. Nine write calls into
+# `~/.cargo/registry/src/…/spider-2.52.13/`, adding `html-escape` to its manifest and
+# `decode_html_entities` to its `push_link`. It was a defensible reading of the task. It also fixed
+# the subject bead for every later build on this machine, including the scorer's, so an untouched
+# base tree began passing the canonical verification and the instrument looked broken rather than
+# poisoned. Nothing about it appears in the diff being graded.
+#
+# So the split follows what is actually immutable:
+#
+#   registry/cache  - the downloaded .crate files, content-addressed and verified. SHARED, because
+#                     re-downloading them is the 357 MB tax this whole section exists to avoid.
+#   registry/index  - the resolver's metadata. SHARED for the same reason.
+#   registry/src    - the EXTRACTED sources, which are ordinary writable files. PRIVATE per run.
+#
+# Cargo repopulates `src` from `cache` without touching the network, so the run pays an extraction
+# and not a download, inside the warm-up and outside the measured window. A run may now edit its
+# dependencies all it likes and take the consequences alone.
+#
+# The private `src` also removes the extraction race between concurrent runs structurally, since
+# there is no longer one directory for two runs to unpack into.
+if [ -d "$HOME/.cargo" ]; then
+    mkdir -p "$run_home/.cargo/registry/src"
+    for shared in bin config.toml credentials.toml env; do
+        [ -e "$HOME/.cargo/$shared" ] && ln -s "$HOME/.cargo/$shared" "$run_home/.cargo/$shared"
+    done
+    for shared in cache index; do
+        [ -d "$HOME/.cargo/registry/$shared" ] &&
+            ln -s "$HOME/.cargo/registry/$shared" "$run_home/.cargo/registry/$shared"
+    done
+fi
 
 # pi carries its OWN MCP configuration, beside its catalog rather than inside the Claude config
 # handled above. Neutralising one and not the other leaves the memory server reachable for exactly
