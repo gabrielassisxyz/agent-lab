@@ -88,13 +88,37 @@ if [ ! -f "$shared_prompt" ]; then
 fi
 cp "$shared_prompt" "$run_dir/prompt.txt"
 
+# ---------------------------------------------------------------------------
+# Everything from here to the end of the warm-up is serialized across concurrent runs, and both
+# halves of that are paid for by a real failure.
+#
+# The warm-up: every run symlinks the machine's single ~/.cargo, so two warming together both unpack
+# crate sources into one shared registry and the loser reads a tree the winner is still writing:
+#
+#     error: couldn't read .../registry/src/.../memchr-2.8.3/src/lib.rs: No such file or directory
+#
+# The check: the first `pi` invocation in a fresh sandbox bootstraps itself through npx against the
+# same shared ~/.npm, and three of those starting within the same second made two lanes report
+# `the model is NOT known inside the jail` about catalogs that were correct and are readable a
+# minute later. Same failure shape, different cache, and it costs a whole round when the gate that
+# is supposed to protect a run is the thing that fails.
+#
+# Both are cold-start effects and both are outside the measured window, so serializing them costs
+# wall clock nobody is billed for. It is taken on a file descriptor rather than as
+# `flock <file> <command>` because what has to be serialized is a shell function that needs the
+# caller's exported environment.
+mkdir -p "$root"
+exec 9>"$root/.cold-start.lock"
+flock 9
+
 say "verifying the sandbox (nothing is measured until this is green)"
-BEAD_COST_CHECKOUT="$checkout" BEAD_COST_MODEL="$model" BEAD_COST_LANE="$lane" "$here/verify.sh" "$run_home" \
-    > "$run_dir/verify.log" 2>&1 || {
+if ! BEAD_COST_CHECKOUT="$checkout" BEAD_COST_MODEL="$model" BEAD_COST_LANE="$lane" \
+        "$here/verify.sh" "$run_home" > "$run_dir/verify.log" 2>&1; then
+    flock -u 9
     echo "run: sandbox NOT verified - see $run_dir/verify.log" >&2
     grep -E "FAIL" "$run_dir/verify.log" >&2 || true
     exit 1
-}
+fi
 grep -c "  ok " "$run_dir/verify.log" | xargs printf 'verify: %s gates ok\n'
 
 # ai-jail decides what to bind from the dotdirs of the HOME it is launched with, so it always runs
@@ -107,23 +131,6 @@ jailed() {
 }
 
 say "warming the build (outside the measured window, on purpose)"
-# Serialized across runs, and the lock is the whole point. Every run symlinks the machine's single
-# ~/.cargo, so two warm-ups starting together both unpack crate sources into one shared
-# registry/src, and the loser reads a tree the winner is still writing:
-#
-#     error: couldn't read .../registry/src/.../memchr-2.8.3/src/lib.rs: No such file or directory
-#
-# That is what killed the first concurrent pair here. It matters far more than the warm-up it
-# broke: once the sources ARE extracted, concurrent builds only read them, so serializing this one
-# step is what keeps the same failure from landing inside a measured run - where a model would have
-# been billed for a cargo race and read as unable to build the project. The lock is held for the
-# warm-up only; the runs themselves stay concurrent.
-#
-# Taken on a file descriptor rather than as `flock <file> <command>`, because the thing to serialize
-# is a shell function that has to keep the caller's exported environment.
-mkdir -p "$root"
-exec 9>"$root/.cargo-warmup.lock"
-flock 9
 warmed=0
 jailed cargo test --no-run --quiet > "$run_dir/prewarm.log" 2>&1 || warmed=1
 flock -u 9
