@@ -35,10 +35,15 @@ bead="${BEAD_COST_BEAD:-arch-42q}"
 run_timeout="${BEAD_COST_TIMEOUT:-7200}"
 
 case "$lane" in
-    pi)  model="${model:-litellm/deepseek-v4-pro-max-k1}" ;;
-    agy) model="${model:-gemini-3.7-flash-medium}" ;;
-    *)   echo "run: unknown lane '$lane' (expected pi or agy)" >&2; exit 2 ;;
+    pi)     model="${model:-litellm/deepseek-v4-pro-max-k1}" ;;
+    agy)    model="${model:-gemini-3.7-flash-medium}" ;;
+    claude) model="${model:-sonnet}" ;;
+    *)      echo "run: unknown lane '$lane' (expected pi, agy or claude)" >&2; exit 2 ;;
 esac
+# The claude lane runs under a named account's own token rather than whatever file-based auth
+# happens to hold, because file auth carries one account at a time and a run against the wrong one
+# starts normally and looks correct. `claude-as` refuses an unknown account instead of falling back.
+claude_account="${BEAD_COST_CLAUDE_ACCOUNT:-primary}"
 
 run_dir="$root/$run_id"
 run_home="$run_dir/home"
@@ -155,6 +160,18 @@ case "$lane" in
             --model "$model" \
             --session-dir "$run_home/.pi/agent/sessions" \
             "$(cat "$run_dir/prompt.txt")" \
+            < /dev/null > "$run_dir/stdout.txt" 2> "$run_dir/stderr.txt"
+        ;;
+    claude)
+        # AGENT_SCOPE=1 is the documented way to tell `claude-as` that a scope is already provided:
+        # without it the wrapper reaches for `systemd-run --user --scope`, which has no session bus
+        # to talk to inside the jail. The run therefore loses the 6G MemoryHigh cap that an
+        # interactive launch gets, which is acceptable for one agent and would not be for a swarm.
+        jailed timeout "$run_timeout" env AGENT_SCOPE=1 claude-as "$claude_account" \
+            --model "$model" \
+            --dangerously-skip-permissions \
+            --output-format json \
+            -p "$(cat "$run_dir/prompt.txt")" \
             < /dev/null > "$run_dir/stdout.txt" 2> "$run_dir/stderr.txt"
         ;;
     agy)

@@ -122,6 +122,57 @@ def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
     return record
 
 
+def read_claude_envelope(stdout: pathlib.Path) -> dict | None:
+    """Read the JSON envelope Claude Code writes at the end of a `-p --output-format json` run.
+
+    Like agy and unlike pi, the envelope IS the measurement: one object at the end, no per-turn log
+    to sum, so `input_tokens` here is the real billed input and not the same quantity as the pi
+    lane's per-turn sum. The three lanes' token columns must never be put side by side.
+
+    Two fields need naming rather than copying. `total_cost_usd` is a LIST PRICE the harness did not
+    pay - this lane authenticates with a subscription account's token, so the money number describes
+    what the same traffic would have cost on the API and describes nothing about this run's bill. It
+    is carried under a name that says so. And cache creation is reported separately from cache
+    reads, which no other lane here distinguishes, so it is kept under its own key instead of being
+    folded into one of theirs.
+    """
+    if not stdout.exists():
+        return None
+    try:
+        envelope = json.loads(stdout.read_text(errors="replace"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("usage"), dict):
+        return None
+    # `modelUsage` is what separates this envelope from agy's, which also carries a `usage` dict.
+    model_usage = envelope.get("modelUsage")
+    if not isinstance(model_usage, dict):
+        return None
+
+    usage = envelope["usage"]
+    details = usage.get("output_tokens_details")
+    thinking = details.get("thinking_tokens") if isinstance(details, dict) else None
+    return {
+        "session_log": str(stdout),
+        "status": envelope.get("subtype"),
+        "stop_reason": envelope.get("stop_reason"),
+        "terminal_reason": envelope.get("terminal_reason"),
+        "turns": envelope.get("num_turns"),
+        "answered_by": sorted(model_usage),
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "cache_read_tokens": usage.get("cache_read_input_tokens"),
+        "cache_write_tokens": usage.get("cache_creation_input_tokens"),
+        "reasoning_tokens": thinking,
+        "list_price_usd_not_paid": envelope.get("total_cost_usd"),
+        "list_price_note": (
+            "list price for the same traffic on the API; this lane runs on a subscription token and "
+            "was not billed this"
+        ),
+        "input_note": "billed input reported by the harness; not comparable with pi's per-turn sum",
+    }
+
+
 def read_worktree(worktree: pathlib.Path) -> dict:
     """What the run left behind: whether it committed, and how large the change was."""
 
@@ -183,10 +234,16 @@ def main() -> int:
     # Each harness keeps its usage somewhere different, so the source is chosen rather than guessed:
     # pi streams a session log, agy writes one envelope at the end. Trying the pi log first and
     # falling through keeps a run whose lane was never recorded readable.
-    session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")
-    usage = read_pi_session(session_dir) if session_dir.exists() else None
-    if usage is None or usage.get("turns") is None:
-        usage = read_agy_envelope(args.run_dir / "stdout.txt") or usage
+    # The claude lane is dispatched by name rather than left to the fallthrough: its envelope also
+    # carries a `usage` dict, so agy's reader would parse it and return a record that is wrong in
+    # the fields it happens to share and silently empty in the rest.
+    if record["lane"] == "claude":
+        usage = read_claude_envelope(args.run_dir / "stdout.txt")
+    else:
+        session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")
+        usage = read_pi_session(session_dir) if session_dir.exists() else None
+        if usage is None or usage.get("turns") is None:
+            usage = read_agy_envelope(args.run_dir / "stdout.txt") or usage
     record["usage"] = usage
     record["worktree"] = read_worktree(args.worktree) if args.worktree else None
 
