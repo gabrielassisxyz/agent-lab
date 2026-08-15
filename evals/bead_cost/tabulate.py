@@ -18,6 +18,7 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -109,11 +110,24 @@ def main() -> int:
         print("  ".join(str(item.get(c)).ljust(widths[c]) for c in columns))
 
     print()
-    for lane in sorted({r["lane"] for r in rows if r["lane"]}):
-        lane_rows = [r for r in rows if r["lane"] == lane]
-        usable = [r for r in lane_rows if r["outcome"] not in ("poisoned-window", "broken")]
+    # Grouped by model rather than by harness. Two of the three models under test run through the
+    # same harness, so a per-harness tally silently averages a lane that is four for four with one
+    # that is nought for four.
+    # The `-kN` suffix pins which of three accounts served a run, so that a rate limit lands on one
+    # ceiling rather than three. It is not the subject of the measurement, and leaving it in splits
+    # one model into three tallies of one or two runs each.
+    def subject(name: str) -> str:
+        return re.sub(r"-k[0-9]+$", "", name)
+
+    for model in sorted({subject(r["model"]) for r in rows if r["model"]}):
+        model_rows = [r for r in rows if r["model"] and subject(r["model"]) == model]
+        usable = [r for r in model_rows if r["outcome"] not in ("poisoned-window", "broken")]
         admitted = [r for r in usable if r["outcome"] == "admitted"]
-        print(f"{lane}: {len(lane_rows)} runs, {len(usable)} usable, {len(admitted)} admitted")
+        median_wall = sorted(r["wall_s"] for r in usable if r["wall_s"]) or [None]
+        print(
+            f"{model}: {len(model_rows)} runs, {len(usable)} usable, {len(admitted)} admitted"
+            + (f", median {median_wall[len(median_wall) // 2]}s" if median_wall[0] else "")
+        )
     return 0
 
 
