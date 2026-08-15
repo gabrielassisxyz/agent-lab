@@ -26,7 +26,11 @@ set -euo pipefail
 
 root="${BEAD_COST_ROOT:-$HOME/tmp/bead-cost}"
 subject="${BEAD_COST_SUBJECT:-$HOME/repositories/archeion}"
-base_repo="$root/_base.git"
+# Named after the subject rather than fixed. One `_base.git` was fine while there was one subject
+# repository; a second one would find a base at a commit from the first, and the check below would
+# report it as a base that moved - a correct refusal with a message that sends the reader looking
+# for a change nobody made.
+base_repo="$root/_base-$(basename "$subject").git"
 branch="${BEAD_COST_BASE_BRANCH:-main}"
 
 [ -d "$subject/.git" ] || { echo "base-repo: no repository at $subject" >&2; exit 1; }
