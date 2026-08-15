@@ -36,10 +36,25 @@ if [ -n "$run_home" ]; then
 fi
 echo "score: grading $worktree" >&2
 
-# The scoring build gets its own target dir, so it never warms - or is warmed by - a run's build.
-# Wall clock is measured on the run, never here, but a shared cache would still let one run's
-# compile pay for another's.
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/mnt/build/cargo-target-bead-cost-scoring}"
+# The scoring build gets a target dir of its own PER TREE, and the "per tree" half is the whole
+# lesson. One directory shared by the scorer was the first design, on the reasoning that scoring
+# must never warm or be warmed by a run's build. That reasoning was right and incomplete: every run
+# is a clone of the same repository, so every tree presents cargo with the same package name and
+# the same version, and one target directory shared across them hands the build artifacts of one
+# run's source to another run's test.
+#
+# It is not a subtle effect. Measured on one unchanged tree at commit cc697df:
+#
+#   shared scoring target dir  -> a1 true, a2 FALSE, a3 true, a4 FALSE, a5 FALSE   (stable, 4 runs)
+#   private, empty target dir  -> a1..a5 all true
+#
+# The stability is what makes it dangerous. Four identical runs agreeing on a wrong verdict reads
+# exactly like a solid measurement, and the wrong verdict is the plausible one - the numeric
+# spellings failing is the documented wrong answer for this bead, so it invites being believed.
+# Every verdict produced through a shared directory has to be discarded, not re-argued.
+scoring_root="${BEAD_COST_SCORING_ROOT:-/mnt/build/cargo-target-bead-cost-scoring}"
+tree_key=$(printf '%s' "$worktree" | md5sum | cut -c1-12)
+export CARGO_TARGET_DIR="$scoring_root/$tree_key"
 
 cp "$here/fixtures/benchmark_arch_42q_verify.rs" \
    "$worktree/tests/benchmark_arch_42q_verify.rs"

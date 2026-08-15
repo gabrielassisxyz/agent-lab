@@ -25,7 +25,16 @@ mkdir -p "$work"
 # supporting for a short supervised sweep.
 deadline=$(awk -v now="$(date +%s)" -v h="$hours" 'BEGIN{printf "%d", now + h*3600}')
 summary="$work/summary.tsv"
-[ -s "$summary" ] || printf 'round\trun\tlane\tmodel\texit\tadmitted\tcommitted\twall_s\tinput\toutput\n' >> "$summary"
+[ -s "$summary" ] || printf 'round\trun\tlane\tmodel\texit\tadmitted\tcommitted\twall_s\tinput\toutput\toutcome\n' >> "$summary"
+
+# WARNING, and it governs how every row below is read. The canonical verification does not currently
+# discriminate: measured 2026-08-15, three untouched base trees and one tree carrying a complete fix
+# all returned the same verdict, and which verdict that is depends on the cargo target directory the
+# scorer builds in. So `admitted` and `outcome` are PROVISIONAL - the run happened, the diff and the
+# trajectory are real and re-scorable, and the verdict is not evidence of anything until the
+# instrument is repaired. The sweep keeps collecting because raw artefacts are what let a metric be
+# repaired without paying for the runs again; it does not keep collecting because the scores mean
+# something.
 
 # The roster. One entry per lane, and the account key is rotated per round rather than fixed: the
 # limit on the Ollama lanes is a request RATE PER ACCOUNT, so two lanes running at once must sit on
@@ -135,25 +144,34 @@ sys.exit(0 if v.get('scored') and a and all(a.values()) else 1)
         input=$(record_field "$run_dir/record.json" "usage.input_tokens")
         output=$(record_field "$run_dir/record.json" "usage.output_tokens")
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        outcome_for_row=$("$here/classify.py" "$run_dir" 2>/dev/null || echo broken)
+        [ "$code" -ne 0 ] && outcome_for_row="broken"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$round" "$run_id" "$name" "$model_for_round" "$code" "$admitted" \
-            "$committed" "${wall:-null}" "$input" "$output" >> "$summary"
+            "$committed" "${wall:-null}" "$input" "$output" "$outcome_for_row" >> "$summary"
 
-        if [ "$admitted" = true ]; then
-            strikes[$name]=0
-            log "$run_id ADMITTED  (${wall:-?}s)"
-        else
-            strikes[$name]=$(( ${strikes[$name]:-0} + 1 ))
-            why="not admitted"
-            lane_unreachable "$run_dir" && why="lane unreachable"
-            [ "$code" -ne 0 ] && why="$why, run.sh exit $code"
-            log "$run_id FAILED    ($why; strike ${strikes[$name]} for $name)"
-            if [ "${strikes[$name]}" -ge 3 ]; then
-                resting[$name]=1
+        outcome=$("$here/classify.py" "$run_dir" 2>/dev/null || echo broken)
+        [ "$code" -ne 0 ] && outcome="broken"
+
+        # A strike means THE LANE COULD NOT BE USED, never that the model got the bead wrong. The
+        # first version counted any non-admission, which rests a lane for producing exactly the data
+        # this sweep exists to collect - and rests it hardest when it is failing the task, which is
+        # the case whose N matters most. Only unreachable and broken count.
+        case "$outcome" in
+            unreachable|broken)
+                strikes[$name]=$(( ${strikes[$name]:-0} + 1 ))
+                log "$run_id $outcome  (strike ${strikes[$name]} for $name)"
+                if [ "${strikes[$name]}" -ge 3 ]; then
+                    resting[$name]=1
+                    strikes[$name]=0
+                    log "$name rests one round after three consecutive unusable runs"
+                fi
+                ;;
+            *)
                 strikes[$name]=0
-                log "$name rests one round after three consecutive failures"
-            fi
-        fi
+                log "$run_id $outcome  (${wall:-?}s)"
+                ;;
+        esac
     done
 done
 
