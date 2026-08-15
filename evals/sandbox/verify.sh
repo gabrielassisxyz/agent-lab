@@ -37,6 +37,8 @@ check "google.com is unreachable"         blocked "timeout 10 curl -sf -o /dev/n
 check "no default route out (raw IP)"     blocked "timeout 10 curl -sf -o /dev/null http://1.1.1.1"
 
 echo "== the one door that must stay open =="
+# pipefail-safe: this string runs in a fresh `bash -c` inside the container, which does not inherit
+# this script's `pipefail`, so an early `grep -q` exit cannot turn a hit into a pipeline failure.
 check "api.anthropic.com reachable via proxy" ok \
   "timeout 15 curl -s -o /dev/null -w '%{http_code}' https://api.anthropic.com/v1/messages | grep -qE '4[0-9]{2}'"
 
