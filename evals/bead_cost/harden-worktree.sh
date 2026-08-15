@@ -38,7 +38,7 @@ checkout="${1:?usage: harden-worktree.sh <run-checkout> [<run-dir>] [<base-repo>
 
 root="${BEAD_COST_ROOT:-$HOME/tmp/bead-cost}"
 run_dir="${2:-$checkout}"
-base_repo="${3:-$root/_base.git}"
+base_repo="${3:-$root/_base-$(basename "${BEAD_COST_SUBJECT:-$HOME/repositories/archeion}").git}"
 
 ro_line=""
 [ -d "$base_repo" ] && ro_line="\"$base_repo\""

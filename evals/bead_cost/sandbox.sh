@@ -142,6 +142,24 @@ link_cache() {
 
 link_cache ".rustup"
 
+# Go's two caches are split along the same line as cargo's, and the split falls out easier here.
+#
+#   the module cache (~/go/pkg/mod) is SHARED. Go writes its files read-only and verifies them
+#   against go.sum, so the class of accident that cost a night on the cargo side - a run editing a
+#   dependency in place and fixing the subject for every later build - takes a deliberate chmod
+#   rather than an ordinary write. Re-downloading it per run would also need network the jail does
+#   not have.
+#
+#   the build cache is PRIVATE, by doing nothing at all: with HOME pointed at the run, Go defaults
+#   GOCACHE to $HOME/.cache/go-build and each run gets an empty one. Measured on the llmux subject,
+#   a cold build plus its slowest test package is 22 s - paid inside the warm-up, outside the
+#   measured window, and it buys the strongest isolation available: no compiled artifact from any
+#   run can reach any other.
+if [ -d "$HOME/go/pkg/mod" ]; then
+    mkdir -p "$run_home/go/pkg"
+    ln -s "$HOME/go/pkg/mod" "$run_home/go/pkg/mod"
+fi
+
 # npm gets the same split as cargo, but NOT for the reason this comment used to give.
 #
 # It claimed a race: `~/.npm` linked whole, a fresh sandbox's first `pi` bootstrapping through npx

@@ -70,7 +70,10 @@ if [ -f "$run_dir/started_at" ]; then
     echo "run: $run_id already ran (started_at exists). Pick another id." >&2
     exit 1
 fi
-[ -d "$checkout" ] || "$here/checkout.sh" "$run_id" >/dev/null
+# The base commit is passed rather than defaulted to the branch tip, because a bead whose work has
+# already landed is cut from BEFORE it: the tip contains the answer. Left unset the tip is used,
+# which is right for a bead nobody has done yet.
+[ -d "$checkout" ] || "$here/checkout.sh" "$run_id" "${BEAD_COST_BASE_COMMIT:-}" >/dev/null
 [ -d "$run_home" ] || "$here/sandbox.sh" "$run_id" >/dev/null
 git -C "$checkout" rev-parse HEAD > "$run_dir/base_commit"
 echo "$lane" > "$run_dir/lane"
@@ -86,7 +89,20 @@ if [ ! -f "$shared_prompt" ]; then
     {
         echo "Solve this issue in the repository you are in. It is tracked as bead $bead."
         echo
-        (cd "$subject" && br show "$bead")
+        # Built from named fields rather than from `br show`'s rendering, and that is not tidiness.
+        # A bead whose work has already landed is the normal case for a benchmark task - the base
+        # tree is cut from before it, and the finished commit is what proves the task solvable - so
+        # the tracker's record of that landing travels with the bead. On the first bead tried this
+        # way the comment log read:
+        #
+        #     [2026-08-14 17:56 UTC] gabriel: Completed by <agent>. Implemented Reserve,
+        #     PendingLease, and ReservationOutcome in …
+        #
+        # which hands over the identifiers the canonical verification demands, and says the work is
+        # done. A run given that is not solving the bead. Whitelisting the fields is what makes the
+        # leak impossible rather than filtered: a field nobody listed cannot reach the prompt, and
+        # the next tracker version can add one without quietly widening what is sent.
+        (cd "$subject" && br show "$bead" --json) | "$here/bead_prompt.py"
         echo
         echo "Make the change and commit it. The repository's gate is bin/ci."
     } > "$shared_prompt"
@@ -140,7 +156,17 @@ jailed() {
 
 say "warming the build (outside the measured window, on purpose)"
 warmed=0
-jailed cargo test --no-run --quiet > "$run_dir/prewarm.log" 2>&1 || warmed=1
+# Chosen from the subject's own manifest rather than configured, because getting it wrong is silent:
+# `cargo test --no-run` in a Go tree warms nothing, exits non-zero, and the run is rejected with a
+# message about a tree that does not build.
+if [ -f "$checkout/go.mod" ]; then
+    # `go build` alone leaves every test dependency cold, and the tests are what the scorer runs.
+    # `-run` with a pattern that matches nothing compiles them all and executes none, so the warm-up
+    # never runs a test whose result could be mistaken for a verdict.
+    jailed sh -c 'go build ./... && go test -run "^$" ./...' > "$run_dir/prewarm.log" 2>&1 || warmed=1
+else
+    jailed cargo test --no-run --quiet > "$run_dir/prewarm.log" 2>&1 || warmed=1
+fi
 flock -u 9
 exec 9>&-
 if [ "$warmed" -ne 0 ]; then
@@ -199,7 +225,13 @@ say "scoring"
 # `score.sh` would otherwise inherit through its own `${CARGO_TARGET_DIR:-...}` default. Harmless
 # for a single run and not harmless for a sweep, where several runs share one directory per slot
 # and the scoring build would start landing in it.
-env -u CARGO_TARGET_DIR "$here/score.sh" "$checkout" "$run_id" "$run_dir" | tee "$run_dir/verdict.json"
+# The scorer is per subject, because a verdict is a statement about one bead's canonical
+# verification and nothing about it generalises: the fixture it vendors, the command that runs it
+# and the shape of the verdict all differ. Chosen from the subject's manifest for the same reason
+# the warm-up is.
+scorer="$here/score.sh"
+[ -f "$checkout/go.mod" ] && scorer="$here/score-go.sh"
+env -u CARGO_TARGET_DIR "$scorer" "$checkout" "$run_id" "$run_dir" | tee "$run_dir/verdict.json"
 "$here/collect.py" "$run_dir" --worktree "$("$here/find-work.sh" "$checkout" "$run_dir")" \
     > "$run_dir/record.json" || true
 cat "$run_dir/record.json" 2>/dev/null || true

@@ -202,10 +202,10 @@ else
     fi
     # The bead must still be open. A fixed base means there is nothing left to measure, and every
     # run would be scored against a tree that already passes.
-    if grep -qi "arch-42q" <<< "$(git -C "$checkout" log --oneline -20)"; then
-        bad "a commit mentioning arch-42q is in the checkout's history - the subject may already be fixed"
+    if grep -qi "${BEAD_COST_BEAD:-arch-42q}" <<< "$(git -C "$checkout" log --oneline -20)"; then
+        bad "a commit mentioning ${BEAD_COST_BEAD:-arch-42q} is in the checkout's history - the subject may already be fixed"
     else
-        pass "no arch-42q fix in the base history"
+        pass "no ${BEAD_COST_BEAD:-arch-42q} fix in the base history"
     fi
     pass "base commit $(git -C "$checkout" rev-parse --short HEAD)"
 fi
@@ -248,7 +248,7 @@ else
     # Single-quoted on purpose: `$0` has to be expanded by the shell INSIDE the jail, against the
     # path passed to it, not by this one before the jail exists.
     # shellcheck disable=SC2016
-    siblings=$(jail sh -c 'ls "$0" 2>/dev/null' "$root" | grep -vxF "$(basename "$run_home_dir")" | grep -vxF "_base.git" || true)
+    siblings=$(jail sh -c 'ls "$0" 2>/dev/null' "$root" | grep -vxF "$(basename "$run_home_dir")" | grep -v '^_base' || true)
     if [ -n "$siblings" ]; then
         bad "a jailed process can list other runs under $root:"
         printf '%s\n' "$siblings" | sed 's/^/        /' >&2
