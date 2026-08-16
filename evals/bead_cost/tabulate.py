@@ -74,7 +74,15 @@ def row(run_dir: pathlib.Path) -> dict:
         # Blanked for a poisoned run rather than shown. The verdict on disk for those is a real
         # number produced by a real build against a dependency that already fixed the subject, so
         # printing it beside the warning invites exactly the reading the warning exists to prevent.
-        "section_a": None if poisoned else (f"{passed}/5" if passed is not None else None),
+        # The denominator comes from the verdict rather than from the first subject's five criteria.
+        # Hard coded it printed `16/5` for every run of the Go bead, which is not a fabricated
+        # number but is a wrong one, in the table the results pages tell people to regenerate.
+        # Records written before the field existed fall back to the five they were graded against.
+        "section_a": None if poisoned else (
+            f"{passed}/{verdict.get('total', len(section) or 5)}" if passed is not None else None),
+        # A tree that does not build is the shape of a near-miss on this subject, not an unscored
+        # run, so the flag belongs beside the score rather than only inside the verdict file.
+        "build_failed": verdict.get("build_failed"),
         "committed": worktree.get("committed"),
         "files": worktree.get("diff_files"),
         "wall_s": int((ended - started).total_seconds()) if started and ended else None,
