@@ -150,7 +150,7 @@ Three concurrent runs of one lane is also settled: `deepseek-max-02` died on a 4
 
 ## Open
 
-- **The cost measurement itself.** `5vg` has one completed run. Cost per completed bead needs every lane through it, and the denominator is still 1.
+- **The cost measurement itself.** `5vg` now has five completed runs, all of them one lane: see [`cost-bead-noise-floor-2026-08-16.md`](cost-bead-noise-floor-2026-08-16.md). That confirms the bead is at ceiling by construction and gives the first run-to-run spread, about 12 % relative sd on turns. Cost per completed bead still needs the other lanes through it.
 - **A harder bead**, selected by the four filters over `llmux`'s implementation-plus-test commits, for the capability question that `5vg` deliberately does not answer.
 - **The per-account request ceiling**, still unmeasured. One data point: k1 sustained 63 minutes and 189 turns of heavy use, with another account live, before a 429.
 - **`ricebench`**, also Go, never examined as a source of candidates.
