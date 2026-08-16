@@ -1,5 +1,7 @@
 # Five runs on the cost bead: the first noise floor on the new subject
 
+> **Superseded in one claim, later the same day.** The verdicts here were produced by a scorer that restored only the canonical test file, and it turned out to grade a run that rewrote the package's other tests as though it had not. These five runs are unaffected - all five keep the package's contract and re-score to 16/16 under the repaired instrument - but the sentence below about the bead being "at ceiling" no longer holds across lanes. See [`five-arms-2026-08-16.md`](five-arms-2026-08-16.md).
+
 One lane, one bead, five runs. **All five passed 16 of 16.** That settles what `5vg` is for, and it produces the first run-to-run spread this experiment has ever had on a task every run completes.
 
 Lane: `kimi-k2.7` through `pi`. Subject: `llmux`, bead `llmux-p4-two-phase-reservation-5vg`, base `64cfb7e`.

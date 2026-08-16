@@ -327,40 +327,35 @@
     "gold_commit": "3d6a5a2",
     "invocations": 1,
     "wall_clock_seconds": 263,
-    "wall_clock_note": "build warmed before the clock",
-    "killed_by": [
-      null
-    ],
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
     "commit": "62bf722",
     "verdict": {
       "passed": 16,
       "total": 16,
       "build_failed": false,
-      "scorer": "score-go.sh, graded per test function"
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
     },
     "admitted": true,
     "completed": true,
     "diff": {
       "files": 1,
       "added": 119,
-      "removed": null
+      "removed": null,
+      "untracked_files": null
     },
-    "landed_in": "internal/route/rate.go",
-    "landed_in_note": "a different file from the gold commit's (coordinator.go); the verification measures behaviour rather than placement",
     "usage_reported": {
       "source": "pi session log, per-turn sum",
       "turns": 41,
       "input_tokens": 2382111,
       "output_tokens": 11559,
       "reasoning_tokens": 7307,
-      "cache_read_tokens": null,
-      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
     },
     "cost_valid": true,
     "cost_caveats": [
-      "one completed run is not a cost per completed bead; the denominator is 1",
       "per-turn input sum counts the whole prompt every turn",
-      "first run on this subject; nothing here is comparable with the arch-42q rows above, which are a different task on a different repository"
+      "cache_read 0 is absence: the Ollama lanes do not report it"
     ]
   },
   "kimi-k2.7-via-pi-llmux-5vg-03": {
@@ -373,23 +368,21 @@
     "gold_commit": "3d6a5a2",
     "invocations": 1,
     "wall_clock_seconds": 298,
-    "wall_clock_note": "build warmed before the clock",
-    "killed_by": [
-      null
-    ],
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
     "commit": "3132e25",
     "verdict": {
       "passed": 16,
       "total": 16,
       "build_failed": false,
-      "scorer": "score-go.sh, graded per test function"
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
     },
     "admitted": true,
     "completed": true,
     "diff": {
       "files": 1,
       "added": 157,
-      "removed": 2
+      "removed": 2,
+      "untracked_files": null
     },
     "usage_reported": {
       "source": "pi session log, per-turn sum",
@@ -397,13 +390,13 @@
       "input_tokens": 2073161,
       "output_tokens": 11585,
       "reasoning_tokens": 7508,
-      "cache_read_tokens": null,
-      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
     },
     "cost_valid": true,
     "cost_caveats": [
       "per-turn input sum counts the whole prompt every turn",
-      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+      "cache_read 0 is absence: the Ollama lanes do not report it"
     ]
   },
   "kimi-k2.7-via-pi-llmux-5vg-04": {
@@ -416,23 +409,21 @@
     "gold_commit": "3d6a5a2",
     "invocations": 1,
     "wall_clock_seconds": 431,
-    "wall_clock_note": "build warmed before the clock",
-    "killed_by": [
-      null
-    ],
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
     "commit": "a675354",
     "verdict": {
       "passed": 16,
       "total": 16,
       "build_failed": false,
-      "scorer": "score-go.sh, graded per test function"
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
     },
     "admitted": true,
     "completed": true,
     "diff": {
       "files": 1,
       "added": 151,
-      "removed": null
+      "removed": null,
+      "untracked_files": null
     },
     "usage_reported": {
       "source": "pi session log, per-turn sum",
@@ -440,13 +431,13 @@
       "input_tokens": 3081962,
       "output_tokens": 15471,
       "reasoning_tokens": 12014,
-      "cache_read_tokens": null,
-      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
     },
     "cost_valid": true,
     "cost_caveats": [
       "per-turn input sum counts the whole prompt every turn",
-      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+      "cache_read 0 is absence: the Ollama lanes do not report it"
     ]
   },
   "kimi-k2.7-via-pi-llmux-5vg-05": {
@@ -459,23 +450,21 @@
     "gold_commit": "3d6a5a2",
     "invocations": 1,
     "wall_clock_seconds": 366,
-    "wall_clock_note": "build warmed before the clock",
-    "killed_by": [
-      null
-    ],
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
     "commit": "1cab277",
     "verdict": {
       "passed": 16,
       "total": 16,
       "build_failed": false,
-      "scorer": "score-go.sh, graded per test function"
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
     },
     "admitted": true,
     "completed": true,
     "diff": {
       "files": 2,
       "added": 162,
-      "removed": null
+      "removed": null,
+      "untracked_files": null
     },
     "usage_reported": {
       "source": "pi session log, per-turn sum",
@@ -483,13 +472,13 @@
       "input_tokens": 3452027,
       "output_tokens": 13722,
       "reasoning_tokens": 9727,
-      "cache_read_tokens": null,
-      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
     },
     "cost_valid": true,
     "cost_caveats": [
       "per-turn input sum counts the whole prompt every turn",
-      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+      "cache_read 0 is absence: the Ollama lanes do not report it"
     ]
   },
   "kimi-k2.7-via-pi-llmux-5vg-06": {
@@ -502,23 +491,21 @@
     "gold_commit": "3d6a5a2",
     "invocations": 1,
     "wall_clock_seconds": 423,
-    "wall_clock_note": "build warmed before the clock",
-    "killed_by": [
-      null
-    ],
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
     "commit": "2acbda5",
     "verdict": {
       "passed": 16,
       "total": 16,
       "build_failed": false,
-      "scorer": "score-go.sh, graded per test function"
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
     },
     "admitted": true,
     "completed": true,
     "diff": {
       "files": 2,
       "added": 170,
-      "removed": 1
+      "removed": 1,
+      "untracked_files": null
     },
     "usage_reported": {
       "source": "pi session log, per-turn sum",
@@ -526,13 +513,881 @@
       "input_tokens": 2639661,
       "output_tokens": 12832,
       "reasoning_tokens": 8407,
-      "cache_read_tokens": null,
-      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
     },
     "cost_valid": true,
     "cost_caveats": [
       "per-turn input sum counts the whole prompt every turn",
-      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy-llmux-5vg-01": {
+    "run": "llmux-agy-01",
+    "model_route": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 321,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "947989a",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 165,
+      "removed": 1,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 375510,
+      "output_tokens": 26647,
+      "reasoning_tokens": 17010,
+      "cache_read_tokens": 6766707,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum",
+      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy-llmux-5vg-02": {
+    "run": "llmux-agy-02",
+    "model_route": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 241,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "2900edf",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 171,
+      "removed": null,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 309494,
+      "output_tokens": 23668,
+      "reasoning_tokens": 13962,
+      "cache_read_tokens": 4741366,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum",
+      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy-llmux-5vg-03": {
+    "run": "llmux-agy-03",
+    "model_route": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 173,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "2873ab0",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 195,
+      "removed": 1,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 239873,
+      "output_tokens": 18007,
+      "reasoning_tokens": 11767,
+      "cache_read_tokens": 2816214,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum",
+      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy-llmux-5vg-04": {
+    "run": "llmux-agy-04",
+    "model_route": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 232,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "c3fe739",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 152,
+      "removed": 1,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 305103,
+      "output_tokens": 25868,
+      "reasoning_tokens": 16413,
+      "cache_read_tokens": 4520222,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum",
+      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+    ]
+  },
+  "gemini-3.7-flash-medium-via-agy-llmux-5vg-05": {
+    "run": "llmux-agy-05",
+    "model_route": "gemini-3.7-flash-medium",
+    "harness": "agy",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 192,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "715ed28",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 155,
+      "removed": null,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "agy envelope",
+      "turns": 1,
+      "input_tokens": 253220,
+      "output_tokens": 21982,
+      "reasoning_tokens": 15717,
+      "cache_read_tokens": 3091782,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum",
+      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-01": {
+    "run": "llmux-claude-01",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 551,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "220b888",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 3,
+      "added": 206,
+      "removed": 3,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 74,
+      "input_tokens": 120,
+      "output_tokens": 35059,
+      "reasoning_tokens": 20255,
+      "cache_read_tokens": 8391659,
+      "cache_write_tokens": 156815,
+      "list_price_usd_not_paid": 3.9846327,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-02": {
+    "run": "llmux-claude-02",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 454,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "2bcf712",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 3,
+      "added": 177,
+      "removed": 13,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 60,
+      "input_tokens": 120,
+      "output_tokens": 31551,
+      "reasoning_tokens": 18406,
+      "cache_read_tokens": 6831217,
+      "cache_write_tokens": 135878,
+      "list_price_usd_not_paid": 3.338258100000002,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-03": {
+    "run": "llmux-claude-03",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 509,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "4c65bbd",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 3,
+      "added": 174,
+      "removed": 15,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 57,
+      "input_tokens": 114,
+      "output_tokens": 38711,
+      "reasoning_tokens": 26153,
+      "cache_read_tokens": 6593632,
+      "cache_write_tokens": 144598,
+      "list_price_usd_not_paid": 3.426684600000002,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-04": {
+    "run": "llmux-claude-04",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 379,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "64cfb7e",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 150,
+      "removed": 3,
+      "untracked_files": 1
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 50,
+      "input_tokens": 76,
+      "output_tokens": 33087,
+      "reasoning_tokens": 24248,
+      "cache_read_tokens": 4826112,
+      "cache_write_tokens": 164279,
+      "list_price_usd_not_paid": 2.9300406,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-05": {
+    "run": "llmux-claude-05",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 2,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "64cfb7e",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": false,
+    "diff": {
+      "files": null,
+      "added": null,
+      "removed": null,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 1,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "list_price_usd_not_paid": 0,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": false,
+    "excluded_because": "never reached the model; a lane that could not be used is not a model that got the task wrong",
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "sonnet-via-claude-llmux-5vg-06": {
+    "run": "llmux-claude-06",
+    "model_route": "sonnet",
+    "harness": "claude",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 347,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "afb5a7e",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 139,
+      "removed": 1,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 43,
+      "input_tokens": 68,
+      "output_tokens": 24776,
+      "reasoning_tokens": 16969,
+      "cache_read_tokens": 4434436,
+      "cache_write_tokens": 137951,
+      "list_price_usd_not_paid": 2.5298808000000004,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "envelope total; not comparable with a per-turn sum"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-llmux-5vg-01": {
+    "run": "llmux-deepseek-01",
+    "model_route": "litellm/deepseek-v4-pro-max-k1",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 997,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "523b1ca",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": true,
+    "diff": {
+      "files": 11,
+      "added": 633,
+      "removed": 246,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 77,
+      "input_tokens": 7854464,
+      "output_tokens": 82798,
+      "reasoning_tokens": 48989,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-llmux-5vg-02": {
+    "run": "llmux-deepseek-02",
+    "model_route": "litellm/deepseek-v4-pro-max-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 724,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "5474f74",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": true,
+    "diff": {
+      "files": 11,
+      "added": 567,
+      "removed": 243,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 64,
+      "input_tokens": 5969157,
+      "output_tokens": 73183,
+      "reasoning_tokens": 42043,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-llmux-5vg-03": {
+    "run": "llmux-deepseek-03",
+    "model_route": "litellm/deepseek-v4-pro-max-k3",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 588,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "f0f1b96",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": true,
+    "diff": {
+      "files": 6,
+      "added": 262,
+      "removed": 163,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 65,
+      "input_tokens": 5212008,
+      "output_tokens": 46903,
+      "reasoning_tokens": 29042,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-llmux-5vg-04": {
+    "run": "llmux-deepseek-04",
+    "model_route": "litellm/deepseek-v4-pro-max-k1",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 603,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "19588c8",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": true,
+    "diff": {
+      "files": 8,
+      "added": 320,
+      "removed": 189,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 66,
+      "input_tokens": 5919007,
+      "output_tokens": 61545,
+      "reasoning_tokens": 36402,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-llmux-5vg-05": {
+    "run": "llmux-deepseek-05",
+    "model_route": "litellm/deepseek-v4-pro-max-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 1266,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "36359d7",
+    "verdict": {
+      "passed": 0,
+      "total": 16,
+      "build_failed": true,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": false,
+    "completed": true,
+    "diff": {
+      "files": 10,
+      "added": 435,
+      "removed": 214,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 100,
+      "input_tokens": 12678076,
+      "output_tokens": 110368,
+      "reasoning_tokens": 66617,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-high-via-pi-llmux-5vg-01": {
+    "run": "llmux-dshigh-01",
+    "model_route": "litellm/deepseek-v4-pro-high-k1",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 544,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "df53f0f",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 3,
+      "added": 137,
+      "removed": 4,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 62,
+      "input_tokens": 4970980,
+      "output_tokens": 46077,
+      "reasoning_tokens": 33556,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-high-via-pi-llmux-5vg-02": {
+    "run": "llmux-dshigh-02",
+    "model_route": "litellm/deepseek-v4-pro-high-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 511,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "2c5932f",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 157,
+      "removed": 3,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 46,
+      "input_tokens": 3071770,
+      "output_tokens": 34317,
+      "reasoning_tokens": 25289,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-high-via-pi-llmux-5vg-03": {
+    "run": "llmux-dshigh-03",
+    "model_route": "litellm/deepseek-v4-pro-high-k3",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 346,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "940cb17",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 142,
+      "removed": 1,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 38,
+      "input_tokens": 2614404,
+      "output_tokens": 31535,
+      "reasoning_tokens": 22604,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-high-via-pi-llmux-5vg-04": {
+    "run": "llmux-dshigh-04",
+    "model_route": "litellm/deepseek-v4-pro-high-k1",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 369,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "52b76a1",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 124,
+      "removed": 2,
+      "untracked_files": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 40,
+      "input_tokens": 2929111,
+      "output_tokens": 28430,
+      "reasoning_tokens": 19926,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
+    ]
+  },
+  "deepseek-v4-pro-high-via-pi-llmux-5vg-05": {
+    "run": "llmux-dshigh-05",
+    "model_route": "litellm/deepseek-v4-pro-high-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 367,
+    "wall_clock_note": "arms ran at different concurrency; not comparable across arms",
+    "commit": "64cfb7e",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh after the 2026-08-16 repair: whole test surface restored from base, graded on a disposable copy"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 148,
+      "removed": 8,
+      "untracked_files": 1
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 39,
+      "input_tokens": 2329071,
+      "output_tokens": 26701,
+      "reasoning_tokens": 18872,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": null
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "cache_read 0 is absence: the Ollama lanes do not report it"
     ]
   }
 }
