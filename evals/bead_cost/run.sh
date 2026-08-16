@@ -14,14 +14,18 @@
 # 357 MB of crates and 172 MB of npm downloaded inside a measured hour and reported as the model's
 # time.
 #
-#   ./run.sh <run-id> <lane> [<model>]      lane: pi | agy
+#   ./run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude
+#
+# A LANE is the pair (harness, model): the same model through two harnesses is not one
+# measurement, because one reports an envelope total and the other a per-turn sum. The two halves
+# are therefore named apart everywhere, and only the records put them back together.
 #
 # Run it detached. A lane takes tens of minutes and a foreground invocation will hit the caller's
 # own timeout long before the run finishes.
 set -euo pipefail
 
-run_id="${1:?usage: run.sh <run-id> <lane> [<model>]}"
-lane="${2:?usage: run.sh <run-id> <lane> [<model>]   lane: pi | agy}"
+run_id="${1:?usage: run.sh <run-id> <harness> [<model>]}"
+harness="${2:?usage: run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude}"
 model="${3:-}"
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -34,11 +38,11 @@ bead="${BEAD_COST_BEAD:-arch-42q}"
 # failed run, never a slow model.
 run_timeout="${BEAD_COST_TIMEOUT:-7200}"
 
-case "$lane" in
+case "$harness" in
     pi)     model="${model:-litellm/deepseek-v4-pro-max-k1}" ;;
     agy)    model="${model:-gemini-3.7-flash-medium}" ;;
     claude) model="${model:-sonnet}" ;;
-    *)      echo "run: unknown lane '$lane' (expected pi, agy or claude)" >&2; exit 2 ;;
+    *)      echo "run: unknown harness '$harness' (expected pi, agy or claude)" >&2; exit 2 ;;
 esac
 # The claude lane runs under a named account's own token rather than whatever file-based auth
 # happens to hold, because file auth carries one account at a time and a run against the wrong one
@@ -60,7 +64,7 @@ export WORKTREE_BASE="$run_dir/worktrees"
 
 say() { printf '\n=== %s\n' "$1"; }
 
-say "environment for $run_id ($lane, $model)"
+say "environment for $run_id ($harness, $model)"
 # A run id is used once, and `checkout.sh` and `sandbox.sh` both enforce that so two runs are never
 # mixed. An environment that was built and then never measured is a different case: `verify.sh`
 # rejecting a sandbox is the gate working, and forcing a new id for it orphans ~100 MB and makes the
@@ -76,7 +80,10 @@ fi
 [ -d "$checkout" ] || "$here/checkout.sh" "$run_id" "${BEAD_COST_BASE_COMMIT:-}" >/dev/null
 [ -d "$run_home" ] || "$here/sandbox.sh" "$run_id" >/dev/null
 git -C "$checkout" rev-parse HEAD > "$run_dir/base_commit"
-echo "$lane" > "$run_dir/lane"
+# The marker file keeps its historical name. Dozens of run directories on disk carry it, and
+# re-collecting a verdict from artefacts already kept is how a metric gets repaired without paying
+# for the runs again - which is worth more than a tidy filename.
+echo "$harness" > "$run_dir/lane"
 echo "$model" > "$run_dir/model"
 
 # ---------------------------------------------------------------------------
@@ -136,7 +143,7 @@ exec 9>"$root/.cold-start.lock"
 flock 9
 
 say "verifying the sandbox (nothing is measured until this is green)"
-if ! BEAD_COST_CHECKOUT="$checkout" BEAD_COST_MODEL="$model" BEAD_COST_LANE="$lane" \
+if ! BEAD_COST_CHECKOUT="$checkout" BEAD_COST_MODEL="$model" BEAD_COST_HARNESS="$harness" \
         "$here/verify.sh" "$run_home" > "$run_dir/verify.log" 2>&1; then
     flock -u 9
     echo "run: sandbox NOT verified - see $run_dir/verify.log" >&2
@@ -186,7 +193,7 @@ fi
 say "measuring"
 date -Iseconds > "$run_dir/started_at"
 set +e
-case "$lane" in
+case "$harness" in
     pi)
         # `< /dev/null` is not optional: a non-interactive agent that inherits a terminal stdin can
         # block forever, and the symptom is indistinguishable from thinking hard.

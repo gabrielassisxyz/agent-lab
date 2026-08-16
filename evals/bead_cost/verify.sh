@@ -295,7 +295,7 @@ else
     if [ -n "${BEAD_COST_MODEL:-}" ]; then
         needle="${BEAD_COST_MODEL#litellm/}"
         subject="$BEAD_COST_MODEL"
-        case "${BEAD_COST_LANE:-pi}" in
+        case "${BEAD_COST_HARNESS:-pi}" in
             agy) lane_models=$(jail agy models 2>/dev/null || true) ;;
             # Claude Code has no catalogue that can be listed without spending a request, so this
             # asks the question that CAN be answered for free and that fails silently when wrong:
@@ -320,9 +320,9 @@ else
         # more often on a loaded machine, which is why it read for weeks as contention between
         # concurrent runs and cost nine of them.
         if [[ "$lane_models" == *"$needle"* ]]; then
-            pass "$subject is known to the ${BEAD_COST_LANE:-pi} lane inside the jail"
+            pass "$subject is known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail"
         else
-            bad "$subject is NOT known to the ${BEAD_COST_LANE:-pi} lane inside the jail - catalog or credentials did not come across"
+            bad "$subject is NOT known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail - catalog or credentials did not come across"
         fi
     fi
 fi

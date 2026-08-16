@@ -226,18 +226,24 @@ def main() -> int:
     # two cost the same quota and mean opposite things.
     record["timeout"] = record.get("exit_code") in ("exit: 124", "124")
 
-    lane_file = args.run_dir / "lane"
-    record["lane"] = lane_file.read_text().strip() if lane_file.exists() else None
+    # `harness` and `model` are recorded separately because a lane is the PAIR of them, and the two
+    # halves answer different questions: the same model through two harnesses is not one measurement
+    # (one reports an envelope total, the other a per-turn sum), and the same harness on two models
+    # is the comparison this experiment exists to make. The marker file keeps its historical name
+    # `lane`; dozens of run directories on disk carry it and re-collection from kept artefacts has to
+    # keep working, which is the whole reason the artefacts are kept.
+    harness_file = args.run_dir / "lane"
+    record["harness"] = harness_file.read_text().strip() if harness_file.exists() else None
     model_file = args.run_dir / "model"
     record["model"] = model_file.read_text().strip() if model_file.exists() else None
 
     # Each harness keeps its usage somewhere different, so the source is chosen rather than guessed:
     # pi streams a session log, agy writes one envelope at the end. Trying the pi log first and
-    # falling through keeps a run whose lane was never recorded readable.
-    # The claude lane is dispatched by name rather than left to the fallthrough: its envelope also
+    # falling through keeps a run whose harness was never recorded readable.
+    # The claude harness is dispatched by name rather than left to the fallthrough: its envelope also
     # carries a `usage` dict, so agy's reader would parse it and return a record that is wrong in
     # the fields it happens to share and silently empty in the rest.
-    if record["lane"] == "claude":
+    if record["harness"] == "claude":
         usage = read_claude_envelope(args.run_dir / "stdout.txt")
     else:
         session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")

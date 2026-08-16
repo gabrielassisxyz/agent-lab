@@ -1,6 +1,6 @@
 {
   "kimi-k2.7-via-pi": {
-    "lane": "litellm/kimi-k2.7 (keys k1 then k3)",
+    "model_route": "litellm/kimi-k2.7 (keys k1 then k3)",
     "harness": "pi",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -33,7 +33,7 @@
     "discarded_because": "pilot round; ran before the ref-namespace and jail leaks were closed, and the agy lane ran unauthenticated for Antigravity. See round-2.md."
   },
   "gemini-3.7-flash-medium-via-agy": {
-    "lane": "gemini-3.7-flash-medium",
+    "model_route": "gemini-3.7-flash-medium",
     "harness": "agy",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -69,7 +69,7 @@
   },
   "gemini-3.7-flash-medium-via-agy-round2": {
     "run": "agy-flash-02",
-    "lane": "gemini-3.7-flash-medium",
+    "model_route": "gemini-3.7-flash-medium",
     "harness": "agy",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -116,7 +116,7 @@
   },
   "deepseek-v4-pro-max-via-pi-round2": {
     "run": "deepseek-max-01",
-    "lane": "litellm/deepseek-v4-pro-max-k1",
+    "model_route": "litellm/deepseek-v4-pro-max-k1",
     "harness": "pi",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -167,7 +167,7 @@
   },
   "deepseek-v4-pro-max-via-pi-run02": {
     "run": "deepseek-max-02",
-    "lane": "litellm/deepseek-v4-pro-max-k1",
+    "model_route": "litellm/deepseek-v4-pro-max-k1",
     "harness": "pi",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -213,7 +213,7 @@
   },
   "deepseek-v4-pro-max-via-pi-run04": {
     "run": "deepseek-max-04",
-    "lane": "litellm/deepseek-v4-pro-max-k3",
+    "model_route": "litellm/deepseek-v4-pro-max-k3",
     "harness": "pi",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -269,7 +269,8 @@
   },
   "sonnet-5-via-claude": {
     "run": "sonnet-01",
-    "lane": "claude, model sonnet, answered by claude-sonnet-5",
+    "model_route": "sonnet",
+    "answered_by": "claude-sonnet-5",
     "harness": "claude",
     "subject": "archeion",
     "bead": "arch-42q",
@@ -318,7 +319,7 @@
   },
   "kimi-k2.7-via-pi-llmux-5vg": {
     "run": "llmux-kimi-02",
-    "lane": "litellm/kimi-k2.7-k2",
+    "model_route": "litellm/kimi-k2.7-k2",
     "harness": "pi",
     "subject": "llmux",
     "bead": "llmux-p4-two-phase-reservation-5vg",

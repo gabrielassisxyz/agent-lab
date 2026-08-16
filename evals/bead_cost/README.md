@@ -4,6 +4,20 @@ Measures **cost per completed bead, per lane**, on one real bead in a real repos
 
 **This is not a SWE-bench experiment and shares none of that machinery.** No Docker, no `predictions.jsonl`, no eval image. The agents are the ones this machine actually uses, and the scoring instrument is the bead's own canonical verification applied to each run's diff. What is borrowed from this repo is its discipline, not its runner: the noise floor comes first, the metric must have headroom, the sandbox is part of the instrument, and no number is ever fabricated.
 
+## Harness, model, lane: three words, and they were once two
+
+A **lane is the pair**: one harness driving one model on one account. It is the unit of comparison, because the halves are not separable. The same model through two harnesses is not one measurement - `agy` reports an envelope total and `pi` a per-turn sum, and the context floor each one pays differs - and the same harness on two models is exactly the comparison this experiment exists to make. The account is part of it too, since the request ceiling is per account.
+
+| word | what it names | where |
+| --- | --- | --- |
+| `harness` | the agent CLI that drives the run: `pi`, `agy`, `claude` | `run.sh`'s second argument, `record.json`, `tabulate.py`'s column |
+| `model_route` | the id the proxy is asked for, account suffix included: `litellm/kimi-k2.7-k2` | `run.sh`'s third argument, `record.json` as `model`, `runs.json` |
+| lane | the pair of the two. Not a field: it is the key of a `runs.json` entry and the roster name in `sweep.sh` | prose, and the results tables |
+
+**`lane` used to be a field, and it named different things in two places** - the harness in `record.json`, the model route in `runs.json`. A reader joining the two on that key would have grouped `pi` with `litellm/kimi-k2.7-k2` as though they sat on one axis. The word now appears only where it means the pair, and the two halves each carry their own name.
+
+One compatibility seam survives, deliberately: the marker file inside a run directory is still called `lane` and still holds the harness. Dozens of run directories on disk carry it, and re-collecting a verdict from kept artefacts is how a metric gets repaired without paying for the runs again. `tabulate.py` reads both keys for the same reason, so a run collected before the rename does not print a blank column and read as a run whose harness went unrecorded.
+
 ## The subject is a parameter, and it has moved once
 
 The harness takes the subject repository, the bead and the base commit from the environment; nothing about a language or a repository is hardcoded in `run.sh`, which picks its warm-up and its scorer from the subject's manifest (`go.mod` or `Cargo.toml`).
