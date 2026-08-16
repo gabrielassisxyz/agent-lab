@@ -61,7 +61,11 @@ def row(run_dir: pathlib.Path) -> dict:
 
     return {
         "run": run_dir.name,
-        "lane": record.get("lane"),
+        # `lane` was the field's name until the harness and the lane were told apart, and records
+        # collected before that carry the old key holding the same value. Read both, or every run
+        # predating the rename prints a blank column and reads as a run whose harness went
+        # unrecorded, which is a different and much more alarming thing.
+        "harness": record.get("harness") or record.get("lane"),
         "model": record.get("model"),
         "base": (run_dir / "base_commit").read_text().strip()[:7]
         if (run_dir / "base_commit").exists()
@@ -103,7 +107,7 @@ def main() -> int:
         print()
         return 0
 
-    columns = ["started", "run", "lane", "model", "outcome", "section_a", "committed", "wall_s", "turns", "input", "output"]
+    columns = ["started", "run", "harness", "model", "outcome", "section_a", "committed", "wall_s", "turns", "input", "output"]
     widths = {c: max(len(c), *(len(str(r.get(c))) for r in rows)) if rows else len(c) for c in columns}
     print("  ".join(c.ljust(widths[c]) for c in columns))
     for item in rows:
