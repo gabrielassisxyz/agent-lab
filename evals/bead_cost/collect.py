@@ -82,6 +82,40 @@ def read_pi_session(session_dir: pathlib.Path) -> dict:
     return record
 
 
+def read_json_envelope(stdout: pathlib.Path) -> dict | None:
+    """Pull the one JSON object a harness writes to stdout, tolerating anything printed around it.
+
+    WHY tolerantly, rather than parsing the whole file. Both envelope harnesses write one object and
+    nothing else - until something upstream writes a line first. `mise` announces the tool version it
+    activated (`mise … tools: claude@2.1.233`) whenever it has to activate one, which depends on what
+    the jail's cache already holds and on nothing this experiment controls. One claude run carried
+    that line and an earlier one did not, and the strict reader returned None for the run that did.
+
+    That failure is the dangerous shape rather than a loud one: the record comes out well formed with
+    `usage: null`, which reads as a harness that reports no usage rather than as a parser that gave
+    up. Left alone it would have emptied a whole arm of its token and cost columns while every run in
+    it passed its verdict, and the tables would have agreed with each other about it.
+    """
+    if not stdout.exists():
+        return None
+    text = stdout.read_text(errors="replace")
+    candidates = [text]
+    # From the first brace, for an envelope preceded by noise; then each line that could be an
+    # object on its own, newest first, for a harness that prints after it as well as before.
+    brace = text.find("{")
+    if brace > 0:
+        candidates.append(text[brace:])
+    candidates.extend(line for line in reversed(text.splitlines()) if line.startswith("{"))
+    for candidate in candidates:
+        try:
+            envelope = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(envelope, dict):
+            return envelope
+    return None
+
+
 def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
     """Read the single JSON envelope agy writes at the end of a `--print` run.
 
@@ -94,13 +128,8 @@ def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
     cache reads and the Ollama lanes do not report them at all, so summing per-turn input on one
     side and reading an envelope on the other counts different things.
     """
-    if not stdout.exists():
-        return None
-    try:
-        envelope = json.loads(stdout.read_text(errors="replace"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("usage"), dict):
+    envelope = read_json_envelope(stdout)
+    if envelope is None or not isinstance(envelope.get("usage"), dict):
         return None
 
     usage = envelope["usage"]
@@ -136,13 +165,8 @@ def read_claude_envelope(stdout: pathlib.Path) -> dict | None:
     reads, which no other lane here distinguishes, so it is kept under its own key instead of being
     folded into one of theirs.
     """
-    if not stdout.exists():
-        return None
-    try:
-        envelope = json.loads(stdout.read_text(errors="replace"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("usage"), dict):
+    envelope = read_json_envelope(stdout)
+    if envelope is None or not isinstance(envelope.get("usage"), dict):
         return None
     # `modelUsage` is what separates this envelope from agy's, which also carries a `usage` dict.
     model_usage = envelope.get("modelUsage")
