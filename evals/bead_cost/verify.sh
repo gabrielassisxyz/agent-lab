@@ -319,7 +319,28 @@ else
         # against a sandbox whose model demonstrably worked: 4 false rejections in 10 runs. It fails
         # more often on a loaded machine, which is why it read for weeks as contention between
         # concurrent runs and cost nine of them.
-        if [[ "$lane_models" == *"$needle"* ]]; then
+        #
+        # Matched as a WHOLE TOKEN rather than as a substring, which is the other half of the same
+        # lesson. `[[ "$lane_models" == *"$needle"* ]]` passes for any PREFIX of a real id: a
+        # mistyped `litellm/kimi-k2.7-`, with the account suffix lost, matched `kimi-k2.7-k1` in the
+        # catalogue. The gate reported the model known, the sandbox was built, the warm-up ran, and
+        # the run reached the measured window before dying against a model nobody serves. A gate
+        # that accepts an id the provider does not have is worse than no gate at all, because it
+        # spends the environment and the operator's attention before it fails. The same applies to
+        # the claude branch, where the needle is an account name and a truncated one would pass.
+        #
+        # Word-splitting the catalogue is what makes this a whole-token test, and every format the
+        # three branches produce is whitespace-separated: pi and agy print a table whose second
+        # column is the id, `claude-as` prints its accounts on one line. Globbing is disabled around
+        # it because the catalogue is data, and an unquoted expansion of data must never be matched
+        # against the filesystem.
+        known=0
+        set -f
+        for candidate in $lane_models; do
+            if [ "$candidate" = "$needle" ]; then known=1; break; fi
+        done
+        set +f
+        if [ "$known" = 1 ]; then
             pass "$subject is known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail"
         else
             bad "$subject is NOT known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail - catalog or credentials did not come across"
