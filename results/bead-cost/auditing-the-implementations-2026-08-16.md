@@ -45,20 +45,7 @@ A scan without a baseline is not a measurement of the run. **The base commit alo
 
 Findings are keyed on tool, rule, file and code snippet, never on line number: a run that adds a function shifts every line below it, and keying on position reports the whole file as new work. The tree scanned is the same one pass 1 grades, so test files are identical across runs and cancel.
 
-| arm | findings not present in the base |
-| --- | --- |
-| kimi-k2.7 | **0** |
-| gemini-3.7-flash | **0** |
-| sonnet | **0** |
-| deepseek pro-high | **0** |
-| deepseek pro-max | 3 to 16 |
-
-And the deepseek-max findings decompose entirely into things pass 1 already reported:
-
-- **three per run** are `staticcheck` restating the compile failure (`ReserveRateSlot undefined`);
-- **the thirteen extra on one run** are all in `internal/route/crash_test.go`, a test file that run authored. That is a leak in the isolation rather than a finding about an implementation, and it is recorded under the coverage gaps below.
-
-**Pass 2 produced no independent finding.** Everything it reported, pass 1 had already said, for a tenth of the cost.
+The first sweep used three tools and one column; the corrected sweep, with five tools and production and test findings separated, is in the section after next. Under either, **pass 2 produced no independent finding**: everything it reported, pass 1 had already said, for a tenth of the cost.
 
 ### The negative control, without which the zeros mean nothing
 
@@ -71,15 +58,31 @@ with the defect      new=3   gosec G107, go.http-default-client, go.http-respons
 
 The instrument fires. The zeros are measured rather than absent.
 
-## What was NOT measured
+## The three gaps this page first reported, and how they closed
 
-Stated because a result that hides its gaps is the same error in a different costume.
+They were written down before they were fixed, because a result that hides its gaps is the same error in a different costume. All three are now closed and the scan was re-run from scratch against a rebuilt baseline.
 
-- **`errcheck` never ran, on any tree.** It fails on the base itself with `failed to check packages`, because the base's `reservation_test.go` does not compile - which is the bead's contract. `errcheck` loads the package including its tests and gives up. It contributed zero findings and the aggregator read that as "nothing to report" rather than "did not run", which is exactly the ambiguous zero this repository keeps being bitten by.
-- **`govulncheck` and `golangci-lint` were not wired in**, although both are installed. `govulncheck` is the only one of these that would notice a run editing `go.mod`, and `golangci-lint` aggregates the most linters, so it is the most likely of the three to have produced something new.
-- **Test files a run CREATED leak into the delta.** The isolation restores every test file that exists at the base, but does not remove test files a run added. One run's own `crash_test.go` therefore contributed thirteen findings about test code to a comparison meant to be about implementations.
+- **`errcheck` never ran, on any tree.** It type-checks each package including its tests, and the base has a package whose test does not compile by construction - that failing test IS the bead's contract - so it aborted the whole run and contributed a zero that read as "nothing to report". With `-ignoretests` it runs, and reports **zero on the base and on the reference solution**: the repository genuinely has no unchecked errors in production code, which is a measurement rather than an absence.
+- **`govulncheck` and `golangci-lint` were not wired in.** Both are now. `golangci-lint` adds seven findings to the baseline; `govulncheck` reports none, and is the only tool here that would notice a run editing `go.mod`.
+- **Test files a run CREATED leaked into the delta.** They are not discarded, because they are work the run did - they are counted in **their own column**. A single total reads "wrote extra tests" as "introduced more problems", which inverts the incentive: one run authored a 100-line crash test and drew findings for it while runs that wrote no extra tests drew none.
 
-None of these changes the conclusion - pass 1 carried the entire signal and pass 2 added nothing independent - but "does not change the conclusion" is a different claim from "was measured", and only the second one was asked for.
+### The scan re-run with all five tools and the split columns
+
+The baseline is 353 findings on the base commit. Against it:
+
+| arm | new in production | new in run-authored tests |
+| --- | --- | --- |
+| kimi-k2.7 | **0** | 0 |
+| gemini-3.7-flash | **0** | 0 |
+| sonnet | **0** | 0 |
+| deepseek pro-high | **0** | 0 |
+| deepseek pro-max | **0** | 6 to 19 |
+
+**Every arm introduces zero static-analysis findings into production code**, including the one whose implementations do not compile. What the earlier pass reported as "three to sixteen findings" for that arm was a compiler error restated by `staticcheck` plus findings in test files the runs wrote themselves. Splitting the columns did not soften the result; it moved it to where it belongs, and pass 1's verdict on that arm is unchanged and unforgiving.
+
+The negative control was re-run against the five-tool scanner and still fires: zero without the injected defect, three with it.
+
+**One regression was introduced and caught while wiring the extra tools.** Making the runner merge stderr broke UBS, whose progress lines corrupted its SARIF, so it contributed 0 instead of 335 - and it was found only by comparing against the earlier baseline. A parser that returns zero on malformed input is indistinguishable from a clean tree, which is the shape this repository keeps paying for.
 
 ## What this says
 

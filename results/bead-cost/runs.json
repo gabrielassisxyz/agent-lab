@@ -550,17 +550,18 @@
     },
     "usage_reported": {
       "source": "agy envelope",
-      "turns": 1,
+      "turns": 79,
       "input_tokens": 375510,
       "output_tokens": 26647,
       "reasoning_tokens": 17010,
       "cache_read_tokens": 6766707,
-      "cache_write_tokens": null
+      "cache_write_tokens": null,
+      "turns_source": "trajectory database, step_type 15",
+      "envelope_num_turns": 1
     },
     "cost_valid": true,
     "cost_caveats": [
-      "envelope total; not comparable with a per-turn sum",
-      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+      "envelope total; not comparable with a per-turn sum"
     ]
   },
   "gemini-3.7-flash-medium-via-agy-llmux-5vg-02": {
@@ -591,17 +592,18 @@
     },
     "usage_reported": {
       "source": "agy envelope",
-      "turns": 1,
+      "turns": 66,
       "input_tokens": 309494,
       "output_tokens": 23668,
       "reasoning_tokens": 13962,
       "cache_read_tokens": 4741366,
-      "cache_write_tokens": null
+      "cache_write_tokens": null,
+      "turns_source": "trajectory database, step_type 15",
+      "envelope_num_turns": 1
     },
     "cost_valid": true,
     "cost_caveats": [
-      "envelope total; not comparable with a per-turn sum",
-      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+      "envelope total; not comparable with a per-turn sum"
     ]
   },
   "gemini-3.7-flash-medium-via-agy-llmux-5vg-03": {
@@ -632,17 +634,18 @@
     },
     "usage_reported": {
       "source": "agy envelope",
-      "turns": 1,
+      "turns": 48,
       "input_tokens": 239873,
       "output_tokens": 18007,
       "reasoning_tokens": 11767,
       "cache_read_tokens": 2816214,
-      "cache_write_tokens": null
+      "cache_write_tokens": null,
+      "turns_source": "trajectory database, step_type 15",
+      "envelope_num_turns": 1
     },
     "cost_valid": true,
     "cost_caveats": [
-      "envelope total; not comparable with a per-turn sum",
-      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+      "envelope total; not comparable with a per-turn sum"
     ]
   },
   "gemini-3.7-flash-medium-via-agy-llmux-5vg-04": {
@@ -673,17 +676,18 @@
     },
     "usage_reported": {
       "source": "agy envelope",
-      "turns": 1,
+      "turns": 66,
       "input_tokens": 305103,
       "output_tokens": 25868,
       "reasoning_tokens": 16413,
       "cache_read_tokens": 4520222,
-      "cache_write_tokens": null
+      "cache_write_tokens": null,
+      "turns_source": "trajectory database, step_type 15",
+      "envelope_num_turns": 1
     },
     "cost_valid": true,
     "cost_caveats": [
-      "envelope total; not comparable with a per-turn sum",
-      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+      "envelope total; not comparable with a per-turn sum"
     ]
   },
   "gemini-3.7-flash-medium-via-agy-llmux-5vg-05": {
@@ -714,17 +718,18 @@
     },
     "usage_reported": {
       "source": "agy envelope",
-      "turns": 1,
+      "turns": 52,
       "input_tokens": 253220,
       "output_tokens": 21982,
       "reasoning_tokens": 15717,
       "cache_read_tokens": 3091782,
-      "cache_write_tokens": null
+      "cache_write_tokens": null,
+      "turns_source": "trajectory database, step_type 15",
+      "envelope_num_turns": 1
     },
     "cost_valid": true,
     "cost_caveats": [
-      "envelope total; not comparable with a per-turn sum",
-      "turns is the envelope's count of agy's own retries, not model steps; the real count is in its trajectory database and is not wired up"
+      "envelope total; not comparable with a per-turn sum"
     ]
   },
   "sonnet-via-claude-llmux-5vg-01": {
