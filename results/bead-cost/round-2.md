@@ -44,9 +44,17 @@ Three things follow, and none of them is "the model got the bead wrong":
 
 #### Why no limit was applied, which is the part that decides whether the lane is fixable
 
+> **Corrected on 2026-08-16. The conclusion this section reached was wrong and the lane is fixable; it was fixed.** The full mechanism, the change and its verification are in [`subject-change-2026-08-16.md`](subject-change-2026-08-16.md). The paragraphs below are kept as written because the correction is the transferable part, and the reasoning that produced the wrong call is what makes it recognisable next time.
+
 The output limit this harness asks for never arrives. `pi` sends `max_completion_tokens`, and that field is silently ignored on the path to Ollama Cloud, so nothing constrains the response and the model runs until it meets the provider's own hard ceiling of 65 536 - which is what the observed cut is, and why it does not match the 32 000 the catalog declares. The proxy compounds it by forcing `reasoning_effort: max` on this lane, so the tokens the run has to spend before it can answer are maximised at the same time as the budget for answering is unbounded.
 
-**Raising the limit is therefore not an available move.** The ceiling belongs to the provider, and the parameter that would stay under it is discarded before it gets there. Anything that makes this lane viable has to change what is sent or where it is sent, and until one of those is established the lane produces failed runs rather than data.
+~~**Raising the limit is therefore not an available move.** The ceiling belongs to the provider, and the parameter that would stay under it is discarded before it gets there. Anything that makes this lane viable has to change what is sent or where it is sent, and until one of those is established the lane produces failed runs rather than data.~~
+
+**What the paragraph above got wrong:** it treated "the field is ignored" as "no limit can be sent", when the request is already being rewritten in transit. The proxy is a place where a limit can be set under a name the provider does read, and setting it there is the fix. `max_tokens: 32000` at the proxy, against `maxTokens: 65536` declared in the catalog, makes a truncation *recoverable* rather than fatal, because `pi` only recovers when the observed output is below the declared maximum.
+
+Verified on the wire (`max_tokens: 5` returns `finish_reason: length` at 5 completion tokens; `max_tokens: 99999999` returns a 400 naming the provider's 65 536) and in a run: `deepseek-max-04` was cut once, on its eighty-first assistant turn, at exactly `output: 32000`, compacted, and ran 49 more turns past the point where `deepseek-max-01` died.
+
+**The transferable half is the shape of the error, not the parameter.** The measurement was right at every step and the conclusion still did not follow from it: each link in the chain was checked, and the sentence drawn from them quietly promoted "this path discards the field" into "no path can carry it". A chain of verified facts does not make the sentence at the end of it verified.
 
 ### Usage, and why the two columns must not be compared
 
@@ -81,5 +89,6 @@ It also takes over link discovery to do it: it opens a broadcast queue on the we
 ## Still open
 
 - **One completed run is not a cost figure.** The arithmetic divides the cost of every run by the runs that completed, and with one lane at one completion there is no denominator worth dividing by yet.
-- **Whether the deepseek lane is viable on this harness at all.** One run cannot separate an unlucky turn from a lane that cannot finish a task of this shape without blowing its output budget.
+- ~~**Whether the deepseek lane is viable on this harness at all.**~~ **Closed 2026-08-16.** The ceiling was the harness's to set and it was set; `deepseek-max-04` was truncated, recovered and continued for 49 turns. The lane's remaining problem is the subject, not the budget: it stopped to ask permission rather than commit, on a bead three other lanes also refused. See [`subject-change-2026-08-16.md`](subject-change-2026-08-16.md).
 - **The request-rate ceiling per account**, still unmeasured, still the precondition for any concurrency number.
+- **The subject itself.** `arch-42q` was retired on 2026-08-16 after four lanes independently concluded its acceptance criteria cannot be met from inside the repository. Nothing above is invalidated by that, but the bead this round measured on is no longer the benchmark's.

@@ -2,7 +2,23 @@
 
 Measures **cost per completed bead, per lane**, on one real bead in a real repository, so that a subscription decision rests on a measured unit rather than on a per-token price. The full design - the arithmetic, the rubric, the run environment and the execution protocol - lives outside this repo with the decision it feeds; this directory is the runnable environment for it.
 
-**This is not a SWE-bench experiment and shares none of that machinery.** No Docker, no `predictions.jsonl`, no eval image. The subject is `archeion` bead `arch-42q`, the agents are the ones this machine actually uses, and the scoring instrument is a Rust integration test applied to each run's diff. What is borrowed from this repo is its discipline, not its runner: the noise floor comes first, the metric must have headroom, the sandbox is part of the instrument, and no number is ever fabricated.
+**This is not a SWE-bench experiment and shares none of that machinery.** No Docker, no `predictions.jsonl`, no eval image. The agents are the ones this machine actually uses, and the scoring instrument is the bead's own canonical verification applied to each run's diff. What is borrowed from this repo is its discipline, not its runner: the noise floor comes first, the metric must have headroom, the sandbox is part of the instrument, and no number is ever fabricated.
+
+## The subject is a parameter, and it has moved once
+
+The harness takes the subject repository, the bead and the base commit from the environment; nothing about a language or a repository is hardcoded in `run.sh`, which picks its warm-up and its scorer from the subject's manifest (`go.mod` or `Cargo.toml`).
+
+| | first subject | current subject |
+| --- | --- | --- |
+| repository | `archeion` (Rust) | `llmux` (Go) |
+| bead | `arch-42q` | `llmux-p4-two-phase-reservation-5vg` |
+| base commit | `6edbb8e` | `64cfb7e`, the parent of the implementing commit |
+| verdict | 5 criteria, binary | 16 test functions, graded, plus a `build_failed` flag |
+| cold build | minutes, 4.5 GB of build directory | 22 s |
+
+**`arch-42q` was retired on 2026-08-16**, after four independent lanes concluded its acceptance criteria cannot be met from inside the repository. The reasoning, the construction of the replacement and the selection filters that now govern the choice are in [`results/bead-cost/subject-change-2026-08-16.md`](../../results/bead-cost/subject-change-2026-08-16.md).
+
+**The current bead is a cost bead, deliberately.** The cheapest lane passes it on the first attempt, which makes it useless for measuring difficulty and exactly right for measuring what a completed bead costs per lane: every lane finishes, so every lane yields a completed unit to divide by. A harder bead, in the 30 to 70 percent band, is a separate instrument for the capability question.
 
 ## Why it lives here
 
@@ -14,16 +30,51 @@ Because `docs/DESIGN.md` §6–§10 is the record of this exact class of experim
 
 ## What is here
 
+**Driving a run**
+
 | file | what |
 | --- | --- |
+| `run.sh` | drive one run end to end, in the one order that is safe: base repo, checkout, sandbox, prompt, verify, warm the build, then measure |
+| `sweep.sh` | run rounds across several lanes, unattended, until a deadline. Decides nothing; every run still goes through `run.sh` |
+
+**Building the environment**
+
+| file | what |
+| --- | --- |
+| `base-repo.sh` | build the isolated base repository every run is cut from, holding ONE branch at ONE commit, named per subject |
+| `checkout.sh` | cut one run's checkout from that base, so it has a ref namespace of its own |
 | `sandbox.sh` | build a per-run `HOME`: copy the constant config, zero the state, close the leaks |
-| `verify.sh` | prove the isolation **before run 1**, rather than assume it |
-| `fixtures/benchmark_arch_42q_verify.rs` | the canonical verification, vendored |
 | `harden-worktree.sh` | narrow the jail's mapping to the run's own worktree, so the rubric is out of reach |
-| `score.sh` | apply the canonical verification to one run's worktree and emit its verdict |
+| `verify.sh` | prove the isolation **before run 1**, rather than assume it |
+| `bead_prompt.py` | render the bead as the task statement, from whitelisted fields. Exists because the tracker's own comment log announced the fix and named its identifiers |
+
+**Scoring**
+
+| file | what |
+| --- | --- |
+| `find-work.sh` | find the tree a run actually left its work in, rather than the one it was launched in |
+| `score.sh` | apply the Rust canonical verification to one run's worktree and emit its verdict |
+| `score-go.sh` | the same for a Go subject, graded per test function rather than binary |
+| `go_verdict.py` · `test_go_verdict.py` | reduce `go test -json` to a verdict; the tests pin the build-failure semantics |
+| `classify.py` · `test_classify.py` | say what a run's outcome was in the vocabulary the arithmetic needs: `admitted`, `wrong`, `no-diff`, and the unreachable cases |
+| `rescore.sh` | re-grade runs that already happened, from the trees they left, and write the verdict back |
+| `fixtures/benchmark_arch_42q_verify.rs` | the first subject's canonical verification, vendored |
+| `fixtures/llmux_5vg_reservation_test.go` | the current subject's, 16 test functions. Already present in the base tree, so the contract reaches the agent through the failing test |
+
+**Reading the results**
+
+| file | what |
+| --- | --- |
 | `collect.py` | reduce one run to its record, from raw artefacts only, reporting absent as `null` |
+| `tabulate.py` | reduce every run under the root to one table, regenerated rather than maintained |
 | `trail.py` | follow a pi session live, or read a finished one |
 | `agy_trail.py` | the same for agy, which does not stream and keeps its trajectory in SQLite |
+
+### Three defaults that are this bead's, not generic
+
+- **`score-go.sh` carries `5vg`'s fixture, path and package** in `BEAD_COST_GO_FIXTURE`, `BEAD_COST_GO_FIXTURE_PATH` and `BEAD_COST_GO_PACKAGE`. A different bead needs all three set, or it silently grades the wrong package.
+- **The prompt is built once per bead and cached** at `_prompt-<bead>.txt` under the run root, deliberately, so lanes are never compared on prompts that differ by a byte. **If the prompt builder changes, the stale file wins and nothing warns you** - delete it to regenerate.
+- **The Go warm-up requires `go build ./...` to succeed but only tries to compile the tests.** That is not laxity: on this bead one test package failing to compile IS the task, and requiring it rejected the first pilot outright.
 
 ## Constant is fine, varying is not
 
