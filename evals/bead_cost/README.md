@@ -34,6 +34,8 @@ The harness takes the subject repository, the bead and the base commit from the 
 
 **The current bead is a cost bead, deliberately.** The cheapest lane passes it on the first attempt, which makes it useless for measuring difficulty and exactly right for measuring what a completed bead costs per lane: every lane finishes, so every lane yields a completed unit to divide by. A harder bead, in the 30 to 70 percent band, is a separate instrument for the capability question.
 
+Confirmed rather than assumed: five runs of that lane all returned 16 of 16, with about 12 percent relative sd on turns and on output tokens. That spread resolves a difference of roughly 20 percent at five runs per arm, so five is enough for lanes that differ by a lot and not for lanes that differ by a little. See [`results/bead-cost/cost-bead-noise-floor-2026-08-16.md`](../../results/bead-cost/cost-bead-noise-floor-2026-08-16.md).
+
 ## Why it lives here
 
 Because `docs/DESIGN.md` §6–§10 is the record of this exact class of experiment going wrong and being caught, and every trap it names applies unchanged:

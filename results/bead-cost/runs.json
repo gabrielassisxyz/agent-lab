@@ -317,7 +317,7 @@
       "the dollar figure is list price for equivalent API traffic, not money spent; it may never be summed with a lane that pays per token"
     ]
   },
-  "kimi-k2.7-via-pi-llmux-5vg": {
+  "kimi-k2.7-via-pi-llmux-5vg-02": {
     "run": "llmux-kimi-02",
     "model_route": "litellm/kimi-k2.7-k2",
     "harness": "pi",
@@ -361,6 +361,178 @@
       "one completed run is not a cost per completed bead; the denominator is 1",
       "per-turn input sum counts the whole prompt every turn",
       "first run on this subject; nothing here is comparable with the arch-42q rows above, which are a different task on a different repository"
+    ]
+  },
+  "kimi-k2.7-via-pi-llmux-5vg-03": {
+    "run": "llmux-kimi-03",
+    "model_route": "litellm/kimi-k2.7-k1",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 298,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": "3132e25",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh, graded per test function"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 1,
+      "added": 157,
+      "removed": 2
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 44,
+      "input_tokens": 2073161,
+      "output_tokens": 11585,
+      "reasoning_tokens": 7508,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+    ]
+  },
+  "kimi-k2.7-via-pi-llmux-5vg-04": {
+    "run": "llmux-kimi-04",
+    "model_route": "litellm/kimi-k2.7-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 431,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": "a675354",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh, graded per test function"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 1,
+      "added": 151,
+      "removed": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 55,
+      "input_tokens": 3081962,
+      "output_tokens": 15471,
+      "reasoning_tokens": 12014,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+    ]
+  },
+  "kimi-k2.7-via-pi-llmux-5vg-05": {
+    "run": "llmux-kimi-05",
+    "model_route": "litellm/kimi-k2.7-k3",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 366,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": "1cab277",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh, graded per test function"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 162,
+      "removed": null
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 46,
+      "input_tokens": 3452027,
+      "output_tokens": 13722,
+      "reasoning_tokens": 9727,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
+    ]
+  },
+  "kimi-k2.7-via-pi-llmux-5vg-06": {
+    "run": "llmux-kimi-06",
+    "model_route": "litellm/kimi-k2.7-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 423,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": "2acbda5",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh, graded per test function"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 2,
+      "added": 170,
+      "removed": 1
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 44,
+      "input_tokens": 2639661,
+      "output_tokens": 12832,
+      "reasoning_tokens": 8407,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "per-turn input sum counts the whole prompt every turn",
+      "one of five runs of a single lane on a single bead; a spread, not a lane comparison"
     ]
   }
 }
