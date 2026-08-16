@@ -2,6 +2,8 @@
   "kimi-k2.7-via-pi": {
     "lane": "litellm/kimi-k2.7 (keys k1 then k3)",
     "harness": "pi",
+    "subject": "archeion",
+    "bead": "arch-42q",
     "invocations": 3,
     "wall_clock_note": "60min ceiling + 6.5min 429 + 4min; not a clean signal",
     "killed_by": [
@@ -33,6 +35,8 @@
   "gemini-3.7-flash-medium-via-agy": {
     "lane": "gemini-3.7-flash-medium",
     "harness": "agy",
+    "subject": "archeion",
+    "bead": "arch-42q",
     "invocations": 1,
     "wall_clock_note": "1352.9s reported by the envelope",
     "killed_by": [
@@ -67,6 +71,8 @@
     "run": "agy-flash-02",
     "lane": "gemini-3.7-flash-medium",
     "harness": "agy",
+    "subject": "archeion",
+    "bead": "arch-42q",
     "base_commit": "6edbb8e",
     "invocations": 1,
     "wall_clock_seconds": 684,
@@ -112,6 +118,8 @@
     "run": "deepseek-max-01",
     "lane": "litellm/deepseek-v4-pro-max-k1",
     "harness": "pi",
+    "subject": "archeion",
+    "bead": "arch-42q",
     "base_commit": "6edbb8e",
     "invocations": 1,
     "wall_clock_seconds": 474,
@@ -155,6 +163,203 @@
     "cost_caveats": [
       "counts in the numerator of cost per completed bead and not in the denominator",
       "per-turn input sum counts the whole prompt every turn"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-run02": {
+    "run": "deepseek-max-02",
+    "lane": "litellm/deepseek-v4-pro-max-k1",
+    "harness": "pi",
+    "subject": "archeion",
+    "bead": "arch-42q",
+    "base_commit": "6edbb8e",
+    "invocations": 1,
+    "wall_clock_seconds": 3809,
+    "wall_clock_note": "63 minutes, ended by throttling; not a clean signal",
+    "killed_by": [
+      "429 after 189 turns, with another account live; the rate ceiling is per account"
+    ],
+    "commit": null,
+    "section_a": {
+      "a1": true,
+      "a2": false,
+      "a3": false,
+      "a4": false,
+      "a5": false
+    },
+    "section_a_note": "the unmodified base signature; the run left no diff, so the scorer graded the base tree",
+    "admitted": false,
+    "completed": false,
+    "failed_run_because": "killed by per-account request throttling, not a wrong answer",
+    "diff": {
+      "files": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 189,
+      "input_tokens": 27670671,
+      "output_tokens": 143872,
+      "reasoning_tokens": 108083,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "counts in the numerator of cost per completed bead and not in the denominator",
+      "per-turn input sum counts the whole prompt every turn",
+      "verdict.json and record.json were rebuilt by hand after the supervisor was killed mid-scoring; the numbers are read from artefacts on disk but the provenance differs from every other run's"
+    ]
+  },
+  "deepseek-v4-pro-max-via-pi-run04": {
+    "run": "deepseek-max-04",
+    "lane": "litellm/deepseek-v4-pro-max-k3",
+    "harness": "pi",
+    "subject": "archeion",
+    "bead": "arch-42q",
+    "base_commit": "6edbb8e",
+    "invocations": 1,
+    "wall_clock_seconds": 989,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": null,
+    "section_a": {
+      "a1": true,
+      "a2": false,
+      "a3": false,
+      "a4": false,
+      "a5": false
+    },
+    "section_a_note": "the unmodified base signature; the run left no diff, so the scorer graded the base tree",
+    "admitted": false,
+    "completed": false,
+    "failed_run_because": "stopped to ask the operator whether to proceed, on a bead three other lanes also refused; no diff produced",
+    "diff": {
+      "files": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 131,
+      "input_tokens": 10680562,
+      "output_tokens": 126339,
+      "reasoning_tokens": 102106,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "output_ceiling_evidence": {
+      "why_this_run_matters": "the only artefact showing the output ceiling fix working: the truncation is survived rather than fatal",
+      "length_stops_in_session": 1,
+      "cut_on_assistant_turn": 81,
+      "cut_at_output_tokens": 32000,
+      "cut_at_reasoning_tokens": 30770,
+      "assistant_turns_after_the_cut": 49,
+      "proxy_max_tokens": 32000,
+      "catalog_max_tokens": 65536,
+      "gap_note": "pi recovers only when observed output is below the declared maximum, so the two values must differ"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "counts in the numerator of cost per completed bead and not in the denominator",
+      "per-turn input sum counts the whole prompt every turn"
+    ]
+  },
+  "sonnet-5-via-claude": {
+    "run": "sonnet-01",
+    "lane": "claude, model sonnet, answered by claude-sonnet-5",
+    "harness": "claude",
+    "subject": "archeion",
+    "bead": "arch-42q",
+    "base_commit": "6edbb8e",
+    "invocations": 1,
+    "wall_clock_seconds": 620,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": null,
+    "section_a": {
+      "a1": true,
+      "a2": false,
+      "a3": false,
+      "a4": false,
+      "a5": false
+    },
+    "section_a_note": "the unmodified base signature; the run left no diff, so the scorer graded the base tree",
+    "admitted": false,
+    "completed": false,
+    "failed_run_because": "argued that the literal acceptance criteria cannot be met from inside this project as currently scoped, and offered three ways forward instead of choosing one",
+    "diff": {
+      "files": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "usage_reported": {
+      "source": "claude envelope",
+      "turns": 49,
+      "stop_reason": "end_turn",
+      "input_tokens": 98,
+      "output_tokens": 50694,
+      "reasoning_tokens": 43149,
+      "cache_read_tokens": 5909569,
+      "cache_write_tokens": 156336,
+      "input_note": "billed input reported by the harness; not comparable with pi's per-turn sum",
+      "list_price_usd_not_paid": 3.4715907000000006,
+      "list_price_note": "list price for the same traffic on the API; this lane runs on a subscription token and was not billed this"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "counts in the numerator of cost per completed bead and not in the denominator",
+      "the dollar figure is list price for equivalent API traffic, not money spent; it may never be summed with a lane that pays per token"
+    ]
+  },
+  "kimi-k2.7-via-pi-llmux-5vg": {
+    "run": "llmux-kimi-02",
+    "lane": "litellm/kimi-k2.7-k2",
+    "harness": "pi",
+    "subject": "llmux",
+    "bead": "llmux-p4-two-phase-reservation-5vg",
+    "base_commit": "64cfb7e",
+    "gold_commit": "3d6a5a2",
+    "invocations": 1,
+    "wall_clock_seconds": 263,
+    "wall_clock_note": "build warmed before the clock",
+    "killed_by": [
+      null
+    ],
+    "commit": "62bf722",
+    "verdict": {
+      "passed": 16,
+      "total": 16,
+      "build_failed": false,
+      "scorer": "score-go.sh, graded per test function"
+    },
+    "admitted": true,
+    "completed": true,
+    "diff": {
+      "files": 1,
+      "added": 119,
+      "removed": null
+    },
+    "landed_in": "internal/route/rate.go",
+    "landed_in_note": "a different file from the gold commit's (coordinator.go); the verification measures behaviour rather than placement",
+    "usage_reported": {
+      "source": "pi session log, per-turn sum",
+      "turns": 41,
+      "input_tokens": 2382111,
+      "output_tokens": 11559,
+      "reasoning_tokens": 7307,
+      "cache_read_tokens": null,
+      "cache_read_note": "Ollama does not report cache reads; absent, not zero"
+    },
+    "cost_valid": true,
+    "cost_caveats": [
+      "one completed run is not a cost per completed bead; the denominator is 1",
+      "per-turn input sum counts the whole prompt every turn",
+      "first run on this subject; nothing here is comparable with the arch-42q rows above, which are a different task on a different repository"
     ]
   }
 }
