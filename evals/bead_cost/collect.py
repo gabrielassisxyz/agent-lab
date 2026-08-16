@@ -17,8 +17,11 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import shutil
+import sqlite3
 import subprocess
 import sys
+import tempfile
 
 
 def read_pi_session(session_dir: pathlib.Path) -> dict:
@@ -116,15 +119,53 @@ def read_json_envelope(stdout: pathlib.Path) -> dict | None:
     return None
 
 
-def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
+AGY_MODEL_STEP = 15
+
+
+def count_agy_steps(run_home: pathlib.Path) -> int | None:
+    """Count the model's turns in agy's trajectory database.
+
+    The envelope's `num_turns` counts agy's own retries and reports 1 for a run of any length, which
+    leaves the metric with the most headroom in this experiment missing for a whole arm. The real
+    count is in the SQLite trajectory the CLI keeps beside its conversation.
+
+    `step_type = 15` is the model step. That is not a guess: an earlier round recorded 132 turns for
+    a run by reading this database, and this query returns exactly 132 for that run's trajectory.
+    Opened read-only through a copy, because the live database is journalled and a run may still be
+    writing to it.
+    """
+    conversations = run_home / ".gemini" / "antigravity-cli" / "conversations"
+    dbs = sorted(conversations.glob("*.db"), key=lambda p: p.stat().st_mtime) if conversations.is_dir() else []
+    if not dbs:
+        return None
+    live = dbs[-1]
+    with tempfile.TemporaryDirectory() as scratch:
+        copy = pathlib.Path(scratch) / "c.db"
+        shutil.copy2(live, copy)
+        wal = live.with_name(live.name + "-wal")
+        if wal.exists():
+            shutil.copy2(wal, copy.with_name("c.db-wal"))
+        try:
+            con = sqlite3.connect(f"file:{copy}?mode=ro", uri=True)
+            return con.execute("select count(*) from steps where step_type = ?",
+                               (AGY_MODEL_STEP,)).fetchone()[0]
+        except sqlite3.Error:
+            return None
+
+
+def read_agy_envelope(stdout: pathlib.Path, run_home: pathlib.Path | None = None) -> dict | None:
     """Read the single JSON envelope agy writes at the end of a `--print` run.
 
     agy does not stream: launched with `--output-format=json` it emits one object when the run is
-    over, so there is no per-turn log to sum and the envelope IS the measurement. Its `num_turns`
-    counts agy's own retries rather than the model's turns, and `status` - not the exit code - is
-    what says whether the run succeeded.
+    over, so there is no per-turn log to sum and the envelope IS the measurement for tokens.
 
-    The two lanes' figures are NOT comparable and must never be quoted as if they were: agy reports
+    Turns are the exception and come from the trajectory database instead. The envelope's
+    `num_turns` counts agy's own retries: five runs of this lane reported 1 apiece while doing
+    between 48 and 79 model steps, and a column that is constant across a dimension it should vary
+    on is the signature this repo has learned to hunt. The envelope's own figure is kept under a
+    name that says what it counts rather than being silently replaced.
+
+    The lanes' figures are NOT comparable and must never be quoted as if they were: agy reports
     cache reads and the Ollama lanes do not report them at all, so summing per-turn input on one
     side and reading an envelope on the other counts different things.
     """
@@ -133,10 +174,14 @@ def read_agy_envelope(stdout: pathlib.Path) -> dict | None:
         return None
 
     usage = envelope["usage"]
+    steps = count_agy_steps(run_home) if run_home else None
     record = {
         "session_log": str(stdout),
         "status": envelope.get("status"),
-        "turns": envelope.get("num_turns"),
+        "turns": steps if steps is not None else envelope.get("num_turns"),
+        "turns_source": "trajectory database, step_type 15" if steps is not None
+                        else "envelope num_turns; counts agy's own retries, not model turns",
+        "envelope_num_turns": envelope.get("num_turns"),
         "duration_seconds": envelope.get("duration_seconds"),
     }
     for key, aliases in (
@@ -292,7 +337,7 @@ def main() -> int:
         session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")
         usage = read_pi_session(session_dir) if session_dir.exists() else None
         if usage is None or usage.get("turns") is None:
-            usage = read_agy_envelope(args.run_dir / "stdout.txt") or usage
+            usage = read_agy_envelope(args.run_dir / "stdout.txt", args.run_dir / "home") or usage
     record["usage"] = usage
     record["worktree"] = read_worktree(args.worktree) if args.worktree else None
 

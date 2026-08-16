@@ -24,8 +24,15 @@ import pathlib
 import re
 import sys
 
+# `429` is bounded by non-digits, and that is the whole point of the boundary. Written bare it
+# matches the digits INSIDE any number that happens to contain them, and one did: a run's envelope
+# carried `"duration_ms":618429`, the classifier read the lane as rate-limited, and a run that had
+# simply produced no diff was recorded as one that never reached the model. The two mean opposite
+# things - one is a lane that could not be used, the other is an answer the model declined to give -
+# and the second is charged to the model while the first rests the lane for a round.
 UNREACHABLE = re.compile(
-    r"429|rate.?limit|quota|authentication failed|not logged in|no such model|model .* not found",
+    r"(?<!\d)429(?!\d)|rate.?limit|quota|authentication failed|not logged in"
+    r"|no such model|model .* not found",
     re.IGNORECASE,
 )
 
