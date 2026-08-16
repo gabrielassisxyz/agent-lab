@@ -15,6 +15,20 @@
 # how the bead states its contract, and the run can read it, edit it, or delete it. Grading the
 # tree's own copy would let a run pass by weakening the test, which is not a thing to detect after
 # the fact but a thing to make impossible.
+#
+# THE WHOLE TEST SURFACE is restored, not just the vendored file, and one run proved why. The
+# canonical test calls helpers it does not define - `reserveAndFinalize` lives in `rate_test.go`,
+# `reserveFinalizeRelease` in `blackout_test.go` - so a run that merely MOVES a helper leaves the
+# vendored file unable to compile and scores zero with `build_failed`, indistinguishable from a run
+# whose implementation is broken. Restoring every test file in the graded package from the base
+# makes the verdict a function of the production code and nothing else, which is what it always
+# claimed to be.
+#
+# And it is done on a COPY. The run's tree is evidence: its implementation has to survive being
+# graded, and being graded twice, because re-scoring from artefacts already on disk is how a metric
+# gets repaired without paying for the runs again. The previous arrangement wrote the fixture into
+# the run's own tree and left it there, which also made the collector's `dirty` flag report the
+# scorer's residue rather than the agent's work.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -36,7 +50,25 @@ if [ -n "$run_home" ]; then
 fi
 echo "score: grading $worktree" >&2
 
-cp "$fixture" "$worktree/$target"
+# The tree the run left is never written to. `origin/main` is the base in every clone, including
+# the ones that committed on top of it, so the pristine test surface is recoverable from the run's
+# own repository without needing to be told which commit that was.
+base_ref="${BEAD_COST_BASE_REF:-origin/main}"
+package_dir="${package#./}"
+package_dir="${package_dir%/}"
+
+graded=$(mktemp -d)
+trap 'rm -rf "$graded"' EXIT
+cp -a "$worktree/." "$graded/"
+
+while IFS= read -r test_file; do
+    [ -n "$test_file" ] || continue
+    git -C "$worktree" show "$base_ref:$test_file" > "$graded/$test_file"
+done < <(git -C "$worktree" ls-tree --name-only "$base_ref" "$package_dir/" | grep '_test\.go$' || true)
+
+cp "$fixture" "$graded/$target"
+source_tree="$worktree"
+worktree="$graded"
 
 cd "$worktree" || { echo "score: cannot enter $worktree" >&2; exit 1; }
 
@@ -45,7 +77,9 @@ cd "$worktree" || { echo "score: cannot enter $worktree" >&2; exit 1; }
 # another tree's test. Go keys its cache on content rather than on package identity, which makes
 # that collision far less likely than cargo's - and "far less likely" is not a property to build a
 # measurement on.
-tree_key=$(printf '%s' "$worktree" | md5sum | cut -c1-12)
+# Keyed on the RUN's tree, not on the disposable copy: the copy has a fresh path every time, and
+# keying on it would hand every re-score a cold cache and call it isolation.
+tree_key=$(printf '%s' "$source_tree" | md5sum | cut -c1-12)
 export GOCACHE="${BEAD_COST_GO_SCORING_ROOT:-/mnt/build/go-build-bead-cost-scoring}/$tree_key"
 mkdir -p "$GOCACHE"
 

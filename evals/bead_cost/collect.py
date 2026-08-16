@@ -219,13 +219,32 @@ def read_worktree(worktree: pathlib.Path) -> dict:
             removed += int(parts[1])
             files += 1
 
+    # `git diff` does not see a file git has never been told about, and a run that solves the bead
+    # in a NEW file and never commits leaves all of its work in exactly that blind spot. One run
+    # wrote 137 lines into a new file, was graded 16/16 on them, and was recorded here as a
+    # thirteen-line change - so the size of a solution read as an outlier of the model rather than
+    # as a hole in the measurement. Untracked files are counted as pure additions, which is what
+    # they are.
+    untracked = (git("ls-files", "--others", "--exclude-standard") or "").splitlines()
+    for name in untracked:
+        path = worktree / name
+        try:
+            added += len(path.read_text(errors="replace").splitlines())
+        except OSError:
+            continue
+        files += 1
+
     return {
         "committed": committed,
         "head": head,
         "diff_files": files or None,
         "diff_added": added or None,
         "diff_removed": removed or None,
+        # True means the run left changes outside its commit, including work in files git was never
+        # told about. It stopped meaning "the scorer wrote a fixture in here" when the scorer moved
+        # to grading a disposable copy.
         "dirty": bool(git("status", "--porcelain")),
+        "untracked_files": len(untracked) or None,
     }
 
 

@@ -39,15 +39,33 @@ for run_id in "${runs[@]}"; do
         continue
     fi
     printf '%-16s ' "$run_id"
+    # The scorer is chosen from the checkout's own manifest, by the same rule `run.sh` uses. Hard
+    # coding one of them meant a Go subject was re-scored by the Rust scorer, which finds no
+    # verification to apply and reports that as a tree that failed - a wrong verdict written back
+    # over a right one, which is the one thing this script must never do.
+    scorer="$here/score.sh"
+    [ -f "$checkout/go.mod" ] && scorer="$here/score-go.sh"
     # Written through a temporary file rather than redirected over the target: a scoring build that
     # dies halfway would otherwise leave an empty verdict behind, which reads as "the tree did not
     # build" about a tree that builds fine.
-    if "$here/score.sh" "$checkout" "$run_id" "$run_dir" > "$run_dir/.verdict.next" 2>/dev/null &&
+    if "$scorer" "$checkout" "$run_id" "$run_dir" > "$run_dir/.verdict.next" 2>/dev/null &&
        [ -s "$run_dir/.verdict.next" ]; then
         mv "$run_dir/.verdict.next" "$run_dir/verdict.json"
         cat "$run_dir/verdict.json"
     else
         rm -f "$run_dir/.verdict.next"
         echo "FAILED to score - previous verdict left in place"
+        continue
+    fi
+
+    # The record is regenerated too. A verdict repaired beside a record that still holds the old
+    # measurement is two artefacts disagreeing about one run, and whichever a table happens to read
+    # decides what gets published.
+    if "$here/collect.py" "$run_dir" --worktree "$("$here/find-work.sh" "$checkout" "$run_dir")" \
+            > "$run_dir/.record.next" 2>/dev/null && [ -s "$run_dir/.record.next" ]; then
+        mv "$run_dir/.record.next" "$run_dir/record.json"
+    else
+        rm -f "$run_dir/.record.next"
+        echo "  (record NOT regenerated - previous record left in place)"
     fi
 done
