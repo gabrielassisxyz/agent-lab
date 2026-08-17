@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "required": ["ranking", "reasons", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "ranking": {"type": "array", "items": {"type": "string"}},
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["impl", "position", "why"],
+        "additionalProperties": false,
+        "properties": {
+          "impl": {"type": "string"},
+          "position": {"type": "integer"},
+          "why": {"type": "string"},
+          "lines": {"type": "string"}
+        }
+      }
+    },
+    "equivalent_pairs": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+    "worst_single_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"impl": {"type": "string"}, "what": {"type": "string"}, "lines": {"type": "string"}}
+    },
+    "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+  }
+}

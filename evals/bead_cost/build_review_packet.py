@@ -131,6 +131,13 @@ def main() -> int:
     packet_path.write_text(body)
     digest = hashlib.sha256(body.encode()).hexdigest()
 
+    # Pass A reads one entry at a time, and it must be the SAME text the comparative packet shows,
+    # cut from the same build. Producing the two from separate runs would let the seed, and with it
+    # the lettering, drift between the passes that are meant to cross-check each other.
+    for letter, entry in zip(letters, entries):
+        (args.out / f"impl-{letter}.md").write_text(
+            f"## Implementation {letter}\n\n```diff\n{entry['diff'].rstrip()}\n```\n")
+
     # The key never goes near a reviewer. It is written beside the packet so the answers can be
     # decoded afterwards, and so the lettering can be reproduced from the seed alone.
     (args.out / "KEY-do-not-show-reviewers.json").write_text(json.dumps({

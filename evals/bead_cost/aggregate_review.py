@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Decode and aggregate the qualitative review, by a rule fixed before any answer existed.
+
+THAT ORDERING IS THE POINT. An aggregation chosen after reading the answers is a choice made while
+already knowing the result, and a number produced that way is not a measurement. Everything this
+file decides - mean rank rather than majority vote, corroborated versus single-source, what counts
+as the review having failed - was settled in the plan and is implemented here before the first
+reviewer was called.
+
+WHAT IT REPORTS
+
+  - the ranking, by MEAN RANK across reviewers (Borda). The task is an ordering, and majority voting
+    over orderings throws away exactly what makes an ordering useful.
+  - whether the reviewers agree with each other at all, as pairwise Spearman correlation. Four
+    orderings that scatter mean the metric has no signal, however well the prose reads.
+  - where the REFERENCE implementation landed. It is the control: near the top and the exercise has
+    signal; last and the result is discarded.
+  - self-preference: whether a reviewer placed its own family's implementation above where the
+    conflict-free reviewers placed it.
+  - findings from pass A, marked corroborated (both reviewers raised it) or single-source.
+
+The verdict on validity is printed as a verdict, not left for a reader to infer politely.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import re
+import statistics
+import sys
+from itertools import combinations
+
+CONFLICT_FREE = {"codex", "glm"}
+# Which reviewer shares a family with which lane. Recorded here rather than inferred, because the
+# whole point is to test the assumption rather than to encode it silently.
+SAME_FAMILY = {"opus": "sonnet", "gemini": "gemini-3.7-flash"}
+
+
+def load_json(text: str) -> dict | None:
+    """Pull the object out of an answer, tolerating prose around it.
+
+    Only `agy` can be handed a schema; the rest are asked in the prompt and sometimes wrap the object
+    in a sentence. A reviewer that answered correctly inside a paragraph has still answered, and
+    discarding it would silently shrink the panel.
+    """
+    for candidate in (text, text[text.find("{"):] if "{" in text else ""):
+        try:
+            value = json.loads(candidate)
+            if isinstance(value, dict):
+                return value
+        except (json.JSONDecodeError, ValueError):
+            pass
+    for match in re.finditer(r"\{.*\}", text, re.S):
+        try:
+            value = json.loads(match.group(0))
+            if isinstance(value, dict):
+                return value
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def spearman(a: list[str], b: list[str]) -> float | None:
+    shared = [x for x in a if x in b]
+    if len(shared) < 3:
+        return None
+    ra = {x: a.index(x) for x in shared}
+    rb = {x: b.index(x) for x in shared}
+    n = len(shared)
+    d2 = sum((ra[x] - rb[x]) ** 2 for x in shared)
+    return 1 - (6 * d2) / (n * (n * n - 1))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("answers", type=pathlib.Path)
+    ap.add_argument("--key", type=pathlib.Path, required=True,
+                    help="the KEY written beside the packet and kept out of the jail")
+    args = ap.parse_args()
+
+    key = json.loads(args.key.read_text())
+    mapping = key["mapping"]
+    reference = key["reference_letter"]
+
+    rankings: dict[str, list[str]] = {}
+    for path in sorted(args.answers.glob("passB-*.txt")):
+        reviewer = path.stem.split("-", 1)[1]
+        answer = load_json(path.read_text(errors="replace"))
+        if not answer or not isinstance(answer.get("ranking"), list):
+            print(f"  WARNING  {reviewer} returned no usable ranking; excluded", file=sys.stderr)
+            continue
+        rankings[reviewer] = [str(x).strip().upper()[:1] for x in answer["ranking"]]
+
+    if not rankings:
+        print("no usable rankings; nothing to aggregate", file=sys.stderr)
+        return 1
+
+    letters = sorted({x for order in rankings.values() for x in order})
+    mean_rank = {
+        letter: statistics.mean([order.index(letter) + 1 for order in rankings.values() if letter in order])
+        for letter in letters
+    }
+    aggregate = sorted(letters, key=lambda x: mean_rank[x])
+
+    print("=== ranking, mean rank across reviewers (lower is better) ===")
+    for pos, letter in enumerate(aggregate, 1):
+        tag = "  <-- REFERENCE" if letter == reference else ""
+        print(f"  {pos}. {letter}  mean {mean_rank[letter]:.2f}   {mapping.get(letter, '?')}{tag}")
+
+    print("\n=== do the reviewers agree with each other? ===")
+    correlations = []
+    for one, two in combinations(sorted(rankings), 2):
+        rho = spearman(rankings[one], rankings[two])
+        if rho is not None:
+            correlations.append(rho)
+            print(f"  {one:8s} vs {two:8s}  rho = {rho:+.2f}")
+    median_rho = statistics.median(correlations) if correlations else None
+
+    print("\n=== self-preference: did a reviewer favour its own family? ===")
+    clean = [r for r in rankings if r in CONFLICT_FREE]
+    for reviewer, family in SAME_FAMILY.items():
+        if reviewer not in rankings:
+            continue
+        letter = next((l for l, src in mapping.items() if family in src), None)
+        if letter is None or not clean:
+            continue
+        mine = rankings[reviewer].index(letter) + 1
+        theirs = statistics.mean([rankings[r].index(letter) + 1 for r in clean if letter in rankings[r]])
+        gap = theirs - mine
+        verdict = "FAVOURED" if gap >= 1 else ("penalised" if gap <= -1 else "no effect")
+        print(f"  {reviewer:8s} placed its family's entry ({letter}) at {mine}, "
+              f"conflict-free reviewers at {theirs:.2f}  ->  {verdict}")
+
+    print("\n=== pass A findings ===")
+    by_impl: dict[str, dict[str, list]] = {}
+    for path in sorted(args.answers.glob("passA-*.txt")):
+        _, letter, reviewer = path.stem.split("-", 2)
+        answer = load_json(path.read_text(errors="replace"))
+        if not answer:
+            print(f"  WARNING  {path.stem} returned no usable JSON", file=sys.stderr)
+            continue
+        for finding in answer.get("findings", []):
+            by_impl.setdefault(letter, {}).setdefault(reviewer, []).append(finding)
+
+    for letter in sorted(by_impl):
+        per = by_impl[letter]
+        counts = {r: len(f) for r, f in per.items()}
+        real = {r: sum(1 for f in fs if f.get("severity") != "taste") for r, fs in per.items()}
+        print(f"  {letter} ({mapping.get(letter, '?')}): findings {counts}, excluding taste {real}")
+        # Corroboration is by the file a finding points at, which is the coarsest honest join: two
+        # reviewers rarely phrase the same objection alike, and matching on wording would report
+        # agreement as disagreement.
+        files = {r: {str(f.get("lines", "")).split(":")[0] for f in fs} for r, fs in per.items()}
+        if len(files) > 1:
+            both = set.intersection(*files.values())
+            print(f"      corroborated files: {sorted(both) if both else 'none'}")
+
+    print("\n=== validity, decided by the rules fixed before the answers existed ===")
+    failures = []
+    ref_position = aggregate.index(reference) + 1
+    if ref_position == len(aggregate):
+        failures.append(f"the reference implementation ranked LAST ({ref_position} of {len(aggregate)})")
+    if median_rho is not None and median_rho < 0.2:
+        failures.append(f"reviewer orderings do not correlate (median rho {median_rho:+.2f})")
+    for path in sorted(args.answers.glob("blind-*.txt")):
+        answer = load_json(path.read_text(errors="replace")) or {}
+        guess = str(answer.get("believe_wrote", "")).strip().upper()[:1]
+        reviewer = path.stem.split("-", 1)[1]
+        family = SAME_FAMILY.get(reviewer)
+        if family and guess and guess in mapping and family in mapping[guess]:
+            failures.append(f"{reviewer} identified its own implementation ({guess}) in the blinding check")
+
+    if failures:
+        print("  INVALID:")
+        for f in failures:
+            print(f"    - {f}")
+        print("  The ranking above must not be published as a result.")
+        return 2
+    print(f"  reference placed {ref_position} of {len(aggregate)}"
+          + (f", median reviewer correlation {median_rho:+.2f}" if median_rho is not None else ""))
+    print("  no invalidating condition triggered")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
