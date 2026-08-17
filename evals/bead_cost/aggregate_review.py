@@ -37,6 +37,33 @@ CONFLICT_FREE = {"codex", "glm"}
 SAME_FAMILY = {"opus": "sonnet", "gemini": "gemini-3.7-flash"}
 
 
+def unwrap_envelope(value: dict) -> dict:
+    """Take the review out of `agy`'s reply envelope, which is a dict but not the answer.
+
+    Only `agy` is handed a schema, and what it returns is `{"status": ..., "response": ...,
+    "structured_output": ...}` with the answer inside one of the last two. Read as-is it is a
+    perfectly valid dict with no `ranking` key, so the reviewer is dropped for having answered
+    correctly - a whole reviewer missing from the panel and nothing anywhere saying why.
+
+    Which half holds it is not fixed: the same CLI has put the full answer in `response` while
+    `structured_output` held an acknowledgement, and the reverse. So both are tried and the one
+    that carries the expected keys wins.
+    """
+    if "status" not in value:
+        return value
+    for candidate in (value.get("structured_output"), value.get("response")):
+        if isinstance(candidate, dict):
+            return candidate
+        if isinstance(candidate, str) and candidate.strip():
+            try:
+                parsed = json.loads(candidate)
+            except ValueError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+    return value
+
+
 def load_json(text: str) -> dict | None:
     """Pull the object out of an answer, tolerating prose around it.
 
@@ -48,14 +75,14 @@ def load_json(text: str) -> dict | None:
         try:
             value = json.loads(candidate)
             if isinstance(value, dict):
-                return value
+                return unwrap_envelope(value)
         except (json.JSONDecodeError, ValueError):
             pass
     for match in re.finditer(r"\{.*\}", text, re.S):
         try:
             value = json.loads(match.group(0))
             if isinstance(value, dict):
-                return value
+                return unwrap_envelope(value)
         except json.JSONDecodeError:
             continue
     return None
@@ -84,11 +111,16 @@ def main() -> int:
     reference = key["reference_letter"]
 
     rankings: dict[str, list[str]] = {}
+    # A reviewer whose answer is unusable is dropped from every number below, and a report that
+    # mentions it only on stderr reads exactly like a complete panel. So the omission is carried to
+    # the verdict instead: an ordering averaged over three reviewers is a different measurement from
+    # one averaged over four, and the difference has to be visible where the result is.
+    unusable_b: list[str] = []
     for path in sorted(args.answers.glob("passB-*.txt")):
         reviewer = path.stem.split("-", 1)[1]
         answer = load_json(path.read_text(errors="replace"))
         if not answer or not isinstance(answer.get("ranking"), list):
-            print(f"  WARNING  {reviewer} returned no usable ranking; excluded", file=sys.stderr)
+            unusable_b.append(reviewer)
             continue
         rankings[reviewer] = [str(x).strip().upper()[:1] for x in answer["ranking"]]
 
@@ -134,11 +166,12 @@ def main() -> int:
 
     print("\n=== pass A findings ===")
     by_impl: dict[str, dict[str, list]] = {}
+    unusable_a: list[str] = []
     for path in sorted(args.answers.glob("passA-*.txt")):
         _, letter, reviewer = path.stem.split("-", 2)
         answer = load_json(path.read_text(errors="replace"))
         if not answer:
-            print(f"  WARNING  {path.stem} returned no usable JSON", file=sys.stderr)
+            unusable_a.append(path.stem)
             continue
         for finding in answer.get("findings", []):
             by_impl.setdefault(letter, {}).setdefault(reviewer, []).append(finding)
@@ -157,6 +190,13 @@ def main() -> int:
             print(f"      corroborated files: {sorted(both) if both else 'none'}")
 
     print("\n=== validity, decided by the rules fixed before the answers existed ===")
+    print(f"  panel: {len(rankings)} usable ranking(s) from {sorted(rankings)}")
+    if unusable_b:
+        print(f"  MISSING from the ranking: {sorted(unusable_b)} - every number above is averaged "
+              f"without them")
+    if unusable_a:
+        print(f"  MISSING from the findings: {sorted(unusable_a)} - corroboration below is weaker "
+              f"than it looks wherever one of the two reviewers is absent")
     failures = []
     ref_position = aggregate.index(reference) + 1
     if ref_position == len(aggregate):
