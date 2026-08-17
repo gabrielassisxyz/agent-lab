@@ -1,10 +1,22 @@
 {
   "type": "object",
-  "required": ["believe_wrote", "why", "confidence"],
+  "required": ["own_family_entry", "confidence"],
   "additionalProperties": false,
   "properties": {
-    "believe_wrote": {"type": "string"},
-    "why": {"type": "string"},
+    "own_family_entry": {"type": "string"},
+    "attributions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["impl", "guessed_family"],
+        "additionalProperties": false,
+        "properties": {
+          "impl": {"type": "string"},
+          "guessed_family": {"type": "string"},
+          "why": {"type": "string"}
+        }
+      }
+    },
     "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
   }
 }
