@@ -78,6 +78,12 @@ Because `docs/DESIGN.md` §6–§10 is the record of this exact class of experim
 | `fixtures/benchmark_arch_42q_verify.rs` | the first subject's canonical verification, vendored |
 | `fixtures/llmux_5vg_reservation_test.go` | the current subject's, 16 test functions. Already present in the base tree, so the contract reaches the agent through the failing test |
 
+### `find-work.sh` is not a nicety, and skipping it produces a confident wrong answer
+
+The instruction files this sandbox carries tell an agent to create its own worktree before its first write, and agents follow them. Two `agy` runs of this campaign left their work in `<run>/llmux-two-phase-reservation` and `<run>/llmux-two-phase` while the launch tree stayed at the base commit.
+
+Anything that reads `<run>/llmux` directly therefore reads an untouched tree and concludes the model did nothing. That happened here: an ad-hoc audit reported two runs as having "changed 166 lines of something else and not done the task", and the scorer - which goes through `find-work.sh` - had them at 16 of 16. **Every hand-written check over a run's tree has to start where the scorer starts.**
+
 **Reading the results**
 
 | file | what |
@@ -178,5 +184,6 @@ Before a second run is launched:
   The number to measure is therefore **requests per second one account tolerates**, not how many keys exist. That is cheaper and more conclusive than inferring it from whole runs, and it is what should decide the concurrency.
 - **`agy`: one at a time.** The quota does not support concurrency and the failure mode is several runs dying mid-way against a limit, which spends the quota *and* produces no data point.
 - **Claude and Codex last.** Codex waits for its window reset regardless.
+- **Never run a git command in a worktree that is serving live runs.** The launchers read `run.sh` from wherever they were pointed, at the moment each run starts. Checking out an earlier commit in that worktree to test whether it is independently green - which is an ordinary thing to do - put two runs of this campaign on a `run.sh` that predated the tracker seeding, and nothing in their artefacts said so; it took a reflog to find. Either finish the runs, or launch them from a tree nobody is about to touch.
 
 `wall_time` is contaminated by design and is never reported as a clean signal - on the ancestor experiment two of ten runs sat ~26 minutes in client-side backoff and died at timeout. With nine concurrent runs on three keys, rate-limit waiting is guaranteed. A run killed by a limit records `timeout: true` and is never confused with a model that failed.

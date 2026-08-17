@@ -83,6 +83,8 @@ Four calls, one per reviewer, through **the same functions the real passes use**
 
 The probe asks each reviewer for its model identifier and for what it sees at the subject repository, so one cheap call answers both *does this work* and *can it reach the solution*. Read every answer before going further.
 
+**Two answers look alarming and are not.** The GLM lane reports its model as `claude-sonnet-4-5`; open models self-report unreliably and the route is `litellm/glm-5.2-k<slot>`, which the proxy maps to `glm-5.2:cloud`. And `codex` prints `bwrap: Failed to make / slave: Operation not permitted` - that is its own sandbox declining to nest inside the jail it is already in, not a failure to run. The answer that actually matters is the negative one: `claude` reporting `Directory does not exist: ~/repositories/llmux` is the isolation working, from inside.
+
 ## Step 4: the real passes
 
 ```sh
@@ -217,12 +219,12 @@ measurement floor   = reviewers × (repeats − 1)   not optional on a packet th
 
 For the eight-arm packet that was **45 review calls** with a panel of three - and the 20 already spent on the four-arm packet are *replaced*, not extended, because a ranking is valid only for the set that was ranked.
 
-Pass A findings carry over only where the entry is byte-identical AND the prompt has not changed. Both were true for five entries in the eight-arm packet and the second was not, so they were re-asked; what that bought is in [the results](../results/bead-cost/qualitative-review-eight-arms-2026-08-17.md), and it is not reassuring about finding counts.
+Pass A findings carry over only where the entry is byte-identical AND the prompt has not changed. The first half is checkable rather than assumed: the same run of the same arm produces the same diff, so hashing the body of each `impl-<letter>.md` and comparing it against the previous packet's says exactly which entries are new. Five of the nine were identical here. Both were true for five entries in the eight-arm packet and the second was not, so they were re-asked; what that bought is in [the results](../results/bead-cost/qualitative-review-eight-arms-2026-08-17.md), and it is not reassuring about finding counts.
 
 The real cost is elsewhere, in three places:
 
 - **The implementation runs.** Five per arm, and one run of a strong model costs more than the whole review pass it will later be judged in.
-- **Attention per entry, and this one is now measured rather than feared.** A five-entry packet is around 32 KB and repeating its comparative pass moved **no position at all**. A nine-entry packet is 59.6 KB, and repeating it moves one position nearly everywhere and two in one place, with mean rank drifting by a full point. The call count is flat; the resolution is not. **Take the floor on the packet you are actually publishing** - a gap that would have been real on five entries is inside the noise on nine.
+- **Attention per entry, and this one is now measured rather than feared.** A five-entry packet is 29.7 KB and repeating its comparative pass moved **no position at all**. A nine-entry packet is 59.6 KB, and repeating it moves one position nearly everywhere and two in one place, with mean rank drifting by a full point. The call count is flat; the resolution is not. **Take the floor on the packet you are actually publishing** - a gap that would have been real on five entries is inside the noise on nine.
 - **The panel.** Adding an arm from a reviewer's family does not cost you that reviewer, but it does cost you its opinion **on that entry**. Check the families before choosing the models, not after - and if an arm turns out to be the same model id as a reviewer, that reviewer is out of the packet entirely rather than merely conflicted. See below.
 
 Each new arm also needs five runs that pass, or it cannot enter the draw.
