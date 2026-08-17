@@ -231,6 +231,12 @@ def classify(run_dir: pathlib.Path) -> str:
         return "unreachable"
 
     if record is not None:
+        # An environment that was built and never launched is not a run that produced nothing. The
+        # marker is `started_at`, which `run.sh` writes at the moment the clock starts and nowhere
+        # else - so its absence means the model was never asked. One such directory sat in an arm's
+        # denominator as a model that left the tree untouched.
+        if not record.get("started_at"):
+            return "broken"
         if last_stop_reason(record) == "length":
             return "truncated"
         if (record.get("usage") or {}).get("status") == "ERROR":

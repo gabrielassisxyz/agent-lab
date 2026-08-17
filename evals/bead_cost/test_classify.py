@@ -39,9 +39,13 @@ ALL_PASS = {"scored": True, "section_a": {f"a{n}": True for n in range(1, 6)}}
 PARTIAL = {"scored": True, "section_a": {"a1": True, "a2": False, "a3": True, "a4": False, "a5": False}}
 UNSCORED = {"scored": False, "reason": "no verdict line - the tree did not build or the test did not run"}
 
-DIRTY = {"worktree": {"committed": False, "dirty": True, "diff_files": 4}}
-COMMITTED = {"worktree": {"committed": True, "dirty": False, "diff_files": 4}}
-CLEAN = {"worktree": {"committed": False, "dirty": False, "diff_files": 0}}
+# Every record here carries `started_at`, because a record without one describes an environment that
+# was built and never launched - which the classifier treats as an instrument outcome rather than as
+# a model that produced nothing.
+STARTED = "2026-08-17T12:00:00-03:00"
+DIRTY = {"started_at": STARTED, "worktree": {"committed": False, "dirty": True, "diff_files": 4}}
+COMMITTED = {"started_at": STARTED, "worktree": {"committed": True, "dirty": False, "diff_files": 4}}
+CLEAN = {"started_at": STARTED, "worktree": {"committed": False, "dirty": False, "diff_files": 0}}
 
 
 class ClassifyTest(unittest.TestCase):
@@ -80,6 +84,17 @@ class ClassifyTest(unittest.TestCase):
 
     def test_a_run_with_no_artefacts_at_all_is_broken(self):
         self.assertEqual(self.outcome(), "broken")
+
+    def test_an_environment_that_was_never_launched_is_broken(self):
+        """`started_at` is written when the clock starts and nowhere else, so its absence means the
+        model was never asked. One such directory sat in an arm's denominator as a model that had
+        left the tree untouched."""
+        never_ran = {"worktree": {"committed": False, "dirty": False},
+                     "usage": {"turns": None, "output_tokens": None}}
+        self.assertEqual(self.outcome(record=never_ran), "broken")
+
+    def test_a_run_that_did_start_is_judged_on_what_it_left(self):
+        self.assertEqual(self.outcome(verdict=PARTIAL, record=CLEAN), "no-diff")
 
     def test_a_run_the_operator_stopped_is_not_a_failed_attempt(self):
         """`rescore.sh` grades trees on disk and cannot know a lane was parked mid-run, so the
