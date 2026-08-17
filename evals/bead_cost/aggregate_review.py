@@ -30,7 +30,6 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import re
 import statistics
 import sys
 from itertools import combinations
@@ -68,28 +67,80 @@ def unwrap_envelope(value: dict) -> dict:
     return value
 
 
-def load_json(text: str) -> dict | None:
-    """Pull the object out of an answer, tolerating prose around it.
+def json_objects(text: str):
+    """Yield the JSON objects in a reviewer's output, LAST one first.
 
-    Only `agy` can be handed a schema; the rest are asked in the prompt and sometimes wrap the object
-    in a sentence. A reviewer that answered correctly inside a paragraph has still answered, and
-    discarding it would silently shrink the panel.
+    SCANNING FORWARDS DOES NOT WORK HERE, and the obvious brace counter is the trap. `codex exec`
+    echoes the whole prompt before answering, the prompt carries the packet, and the packet is Go
+    source - braces and quotes of its own, in quantity. A counter walking from the start loses
+    synchronisation inside that code and never reaches the answer: on a real 38 KB transcript it
+    produced two candidate spans, neither of them parseable, out of a file that ends in a perfectly
+    well-formed object.
+
+    `raw_decode` removes the guesswork. It parses a value starting at a given offset and simply
+    stops when the value ends, so nothing has to be known about what follows - no closing brace to
+    find, no code to survive. Walking the opening braces from the end backwards therefore reaches
+    the answer before anything upstream of it, which is what makes the echoed example harmless.
     """
-    for candidate in (text, text[text.find("{"):] if "{" in text else ""):
-        try:
-            value = json.loads(candidate)
-            if isinstance(value, dict):
-                return unwrap_envelope(value)
-        except (json.JSONDecodeError, ValueError):
-            pass
-    for match in re.finditer(r"\{.*\}", text, re.S):
-        try:
-            value = json.loads(match.group(0))
-            if isinstance(value, dict):
-                return unwrap_envelope(value)
-        except json.JSONDecodeError:
+    decoder = json.JSONDecoder()
+    for index in range(len(text) - 1, -1, -1):
+        if text[index] != "{":
             continue
+        try:
+            value, _ = decoder.raw_decode(text, index)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            yield value
+
+
+def first_object(text: str) -> dict | None:
+    """The first parseable object in the text, which is where an `agy` reply envelope will be."""
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text, index)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            return value
     return None
+
+
+def load_json(text: str, *expected: str) -> dict | None:
+    """Pull the reviewer's answer out of whatever its CLI wrote around it.
+
+    Only `agy` can be handed a schema; the rest are asked in the prompt and answer inside whatever
+    their harness prints. A reviewer that answered correctly inside a transcript has still answered,
+    and dropping it would silently shrink the panel.
+
+    THE SEARCH RUNS BACKWARDS, and the expected key is what stops it. Reading from the first brace
+    onwards produced nothing usable for seven calls out of eighteen, and the reviewers that wrote
+    them would have been dropped for having answered. Two things upstream of the answer parse
+    perfectly well on their own - the objects nested inside it, and the example in the echoed prompt
+    - so "the last object" is not enough on its own: `reasons[0]` is the last object in the file and
+    it is not the answer. Naming the key the caller needs is what distinguishes them.
+    """
+    # THE TWO SHAPES WANT OPPOSITE RULES, which is why the envelope is settled first and alone.
+    # An `agy` file is one object and nothing else, and it carries a copy of the schema it was
+    # handed - whose `properties` is an object whose KEYS are the very keys named below. Search that
+    # file backwards and the schema is reached before the answer, so the reviewer comes back holding
+    # {"type": "string"} where its ranking should be. Once a reply envelope is recognised, it is the
+    # only thing in the file worth reading.
+    envelope = first_object(text)
+    if envelope is not None and "status" in envelope:
+        answer = unwrap_envelope(envelope)
+        return answer if answer is not envelope else None
+
+    fallback = None
+    for value in json_objects(text):
+        if expected and any(key in value for key in expected):
+            return value
+        if fallback is None:
+            fallback = value
+    return fallback
 
 
 def spearman(a: list[str], b: list[str]) -> float | None:
@@ -122,7 +173,7 @@ def main() -> int:
     unusable_b: list[str] = []
     for path in sorted(args.answers.glob("passB-*.txt")):
         reviewer = path.stem.split("-", 1)[1]
-        answer = load_json(path.read_text(errors="replace"))
+        answer = load_json(path.read_text(errors="replace"), "ranking")
         if not answer or not isinstance(answer.get("ranking"), list):
             unusable_b.append(reviewer)
             continue
@@ -173,7 +224,7 @@ def main() -> int:
     unusable_a: list[str] = []
     for path in sorted(args.answers.glob("passA-*.txt")):
         _, letter, reviewer = path.stem.split("-", 2)
-        answer = load_json(path.read_text(errors="replace"))
+        answer = load_json(path.read_text(errors="replace"), "findings")
         if not answer:
             unusable_a.append(path.stem)
             continue
@@ -225,7 +276,7 @@ def main() -> int:
     # whose truthful answer is always "none" - so it would have reported the blinding intact without
     # ever having tested it.
     for path in sorted(args.answers.glob("blind-*.txt")):
-        answer = load_json(path.read_text(errors="replace")) or {}
+        answer = load_json(path.read_text(errors="replace"), "own_family_entry") or {}
         guess = str(answer.get("own_family_entry", "")).strip().upper()[:1]
         reviewer = path.stem.split("-", 1)[1]
         family = SAME_FAMILY.get(reviewer)
