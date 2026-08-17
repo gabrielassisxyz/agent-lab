@@ -143,6 +143,33 @@ def load_json(text: str, *expected: str) -> dict | None:
     return fallback
 
 
+REFUSALS = {"NONE", "CANNOT_TELL", "CANNOT TELL", "UNKNOWN", ""}
+
+
+def read_blinding_pick(value, mapping: dict) -> tuple[str, str]:
+    """Read the blinding answer as a letter, a refusal, or something nobody should guess at.
+
+    Returns (letter, unreadable). Exactly one is ever non-empty.
+
+    THE PROMPT OFFERS REFUSALS AND MEANS IT - "none" and "cannot_tell" are listed beside the letters
+    because they are the useful answers when they are the true ones. Taking the first character of
+    the reply turns "cannot_tell" into "C", and C, in the first real run, was the entry belonging to
+    Gemini's own family. Three of four reviewers refused, and the check reported the blinding broken
+    and the whole ranking void. Opus refused too and escaped only because its family happened to be
+    the B entry.
+
+    So a pick is an exact letter and nothing else. Anything unrecognised is neither accepted nor
+    silently dropped: swallowing it is how a real blinding failure goes unnoticed, which is the
+    failure this check exists to catch.
+    """
+    text = str(value if value is not None else "").strip().strip('"').upper()
+    if text in REFUSALS:
+        return "", ""
+    if text in mapping:
+        return text, ""
+    return "", text
+
+
 def spearman(a: list[str], b: list[str]) -> float | None:
     shared = [x for x in a if x in b]
     if len(shared) < 3:
@@ -277,10 +304,13 @@ def main() -> int:
     # ever having tested it.
     for path in sorted(args.answers.glob("blind-*.txt")):
         answer = load_json(path.read_text(errors="replace"), "own_family_entry") or {}
-        guess = str(answer.get("own_family_entry", "")).strip().upper()[:1]
         reviewer = path.stem.split("-", 1)[1]
         family = SAME_FAMILY.get(reviewer)
-        if family and guess and guess in mapping and family in mapping[guess]:
+        guess, unreadable = read_blinding_pick(answer.get("own_family_entry"), mapping)
+        if unreadable:
+            attention.append(f"{reviewer} answered the blinding check with {unreadable!r}, which is "
+                             f"neither a letter nor a refusal; read that answer by hand")
+        if family and guess and family in mapping[guess]:
             failures.append(
                 f"{reviewer} picked out its own family's entry ({guess}) in the blinding check, "
                 f"so its ranking of that entry cannot be treated as blind")

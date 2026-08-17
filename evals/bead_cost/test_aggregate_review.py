@@ -17,7 +17,7 @@ from contextlib import redirect_stdout
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import aggregate_review  # noqa: E402
-from aggregate_review import load_json, unwrap_envelope  # noqa: E402
+from aggregate_review import load_json, read_blinding_pick, unwrap_envelope  # noqa: E402
 
 RANKING = {"ranking": ["E", "A", "B", "C", "D"], "confidence": "high"}
 KEY = {
@@ -139,6 +139,30 @@ class Transcript(unittest.TestCase):
         self.assertIsNone(load_json("no json here, only regret", "ranking"))
 
 
+class BlindingPick(unittest.TestCase):
+    """The prompt offers "none" and "cannot_tell" beside the letters, so they have to survive."""
+
+    LETTERS = {"A": "kimi / r1", "B": "sonnet / r2", "C": "gemini-3.7-flash / r3",
+               "D": "deepseek / r4", "E": "reference commit abc1234"}
+
+    def test_a_refusal_is_not_the_letter_it_starts_with(self):
+        # "cannot_tell"[:1] is "C", and C was the Gemini entry in the first real run.
+        self.assertEqual(("", ""), read_blinding_pick("cannot_tell", self.LETTERS))
+        self.assertEqual(("", ""), read_blinding_pick("none", self.LETTERS))
+
+    def test_a_letter_is_a_pick(self):
+        self.assertEqual(("B", ""), read_blinding_pick("B", self.LETTERS))
+        self.assertEqual(("B", ""), read_blinding_pick(' "b" ', self.LETTERS))
+
+    def test_anything_else_is_surfaced_rather_than_dropped(self):
+        self.assertEqual(("", "IMPLEMENTATION C"),
+                         read_blinding_pick("Implementation C", self.LETTERS))
+
+    def test_a_missing_answer_is_a_refusal_not_a_pick(self):
+        self.assertEqual(("", ""), read_blinding_pick(None, self.LETTERS))
+
+
+
 def write_panel(tmp: pathlib.Path, rankings: dict[str, list[str]], envelope: set[str] = frozenset()):
     answers = tmp / "answers"
     answers.mkdir(parents=True, exist_ok=True)
@@ -241,6 +265,30 @@ class Verdict(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("MISSING from the ranking", out)
         self.assertIn("gemini", out)
+
+    def test_a_reviewer_refusing_the_blinding_check_does_not_invalidate(self):
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "B", "C", "D"],
+            "glm": ["E", "A", "C", "B", "D"],
+            "gemini": ["E", "C", "A", "B", "D"],
+        })
+        for reviewer in ("codex", "glm", "gemini"):
+            (answers / f"blind-{reviewer}.txt").write_text(
+                json.dumps({"own_family_entry": "cannot_tell", "confidence": "low"}))
+        code, out = run(answers, key)
+        self.assertEqual(0, code)
+        self.assertNotIn("blinding check", out)
+
+    def test_a_reviewer_naming_its_own_family_still_invalidates(self):
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "B", "C", "D"],
+            "glm": ["E", "A", "C", "B", "D"],
+            "gemini": ["E", "C", "A", "B", "D"],
+        })
+        (answers / "blind-gemini.txt").write_text(json.dumps({"own_family_entry": "C"}))
+        code, out = run(answers, key)
+        self.assertEqual(2, code)
+        self.assertIn("picked out its own family", out)
 
     def test_reviewers_that_scatter_still_invalidate(self):
         # The check that survives the reference losing its status: agreement between reviewers is
