@@ -24,7 +24,7 @@ Three passes of the comparative call over the SAME packet - same entries, same l
 
 On the five-entry packet this same measurement moved **no position at all**, with mean rank wandering by 0.5. On nine entries it moves one position almost everywhere and two in one place, and the drift reaches 1.0.
 
-The packet went from about 32 KB to 59.6 KB and the call count did not change, so each entry got a smaller share of the same attention. That was written down as an open question and is now measured: **a gap under one full rank position is not something this packet resolves.**
+The packet went from 29.7 KB to 59.6 KB and the call count did not change, so each entry got a smaller share of the same attention. That was written down as an open question and is now measured: **a gap under one full rank position is not something this packet resolves.**
 
 ## The ranking, replicated
 

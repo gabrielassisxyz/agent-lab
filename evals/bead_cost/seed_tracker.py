@@ -20,6 +20,12 @@ field outside the list ever reaches the record. The bead's `comments` are the sp
 this subject the log reads "Completed by <agent>. Implemented Reserve, PendingLease, and
 ReservationOutcome in ...", which names the identifiers the canonical verification demands.
 
+WHY JSONL AND NOT `br create`. The id has to be the id the prompt names, and `br create` mints its
+own - prefix, slug and a uniquifying hash - so a workspace built that way holds a bead the run
+cannot look up. `br init` followed by a single-record `issues.jsonl` and `br sync --import-only`
+preserves the id exactly. Checked before this script existed: `br ready` lists the bead, `br show`
+returns it open, and `comments` comes back empty.
+
     ./seed_tracker.py <checkout> --subject <path> --bead <id>
 """
 from __future__ import annotations
