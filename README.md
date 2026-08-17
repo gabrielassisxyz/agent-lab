@@ -34,6 +34,7 @@ What does not exist yet: the full experiment matrix. The reasoning, the rejected
 | path | what |
 | --- | --- |
 | `docs/DESIGN.md` | the decision record — read this first |
+| `docs/qualitative-review.md` | the runbook for judging implementations by how much future work they create, once a deterministic scorer has said they all work |
 | `evals/` | runners (`noise_floor.py`, `score_runs.py`, `nodes.py`) and the sandbox |
 | `evals/sandbox/` | the network-isolated Docker sandbox + LiteLLM proxy |
 | `results/` | committed experiment outputs |
