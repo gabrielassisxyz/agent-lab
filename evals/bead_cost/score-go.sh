@@ -57,20 +57,14 @@ base_ref="${BEAD_COST_BASE_REF:-origin/main}"
 package_dir="${package#./}"
 package_dir="${package_dir%/}"
 
-graded=$(mktemp -d)
-trap 'rm -rf "$graded"' EXIT
-cp -a "$worktree/." "$graded/"
-
-while IFS= read -r test_file; do
-    [ -n "$test_file" ] || continue
-    git -C "$worktree" show "$base_ref:$test_file" > "$graded/$test_file"
-done < <(git -C "$worktree" ls-tree --name-only "$base_ref" "$package_dir/" | grep '_test\.go$' || true)
-
-cp "$fixture" "$graded/$target"
 source_tree="$worktree"
-worktree="$graded"
 
-cd "$worktree" || { echo "score: cannot enter $worktree" >&2; exit 1; }
+# The criteria come from the FIXTURE, not from what reported. A tree that does not build reports
+# nothing, and grading only what reported would score it as a perfect zero-criterion run. Read from
+# the vendored file so the list cannot drift from the verification actually applied.
+mapfile -t expected < <(grep -oE '^func (Test[A-Za-z0-9_]+)' "$fixture" | cut -d' ' -f2)
+[ "${#expected[@]}" -gt 0 ] ||
+    { echo "score: no Test functions found in $fixture" >&2; exit 1; }
 
 # The build cache is the scorer's own and per tree, for the reason `score.sh` spells out at length:
 # every run is a clone of one repository, so a shared cache hands one tree's compiled artefacts to
@@ -83,16 +77,51 @@ tree_key=$(printf '%s' "$source_tree" | md5sum | cut -c1-12)
 export GOCACHE="${BEAD_COST_GO_SCORING_ROOT:-/mnt/build/go-build-bead-cost-scoring}/$tree_key"
 mkdir -p "$GOCACHE"
 
-# `|| true`: a tree that has not implemented the bead fails these tests, which is the expected
-# outcome for most runs and not an error in the scorer. The verdict is read from the report, never
-# from the exit code.
-report=$(go test -json -count=1 "$package" 2>&1) || true
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
 
-# The criteria come from the FIXTURE, not from what reported. A tree that does not build reports
-# nothing, and grading only what reported would score it as a perfect zero-criterion run. Read from
-# the vendored file so the list cannot drift from the verification actually applied.
-mapfile -t expected < <(grep -oE '^func (Test[A-Za-z0-9_]+)' "$fixture" | cut -d' ' -f2)
-[ "${#expected[@]}" -gt 0 ] ||
-    { echo "score: no Test functions found in $fixture" >&2; exit 1; }
+# TWO REGIMES, because one number was answering two questions and only reporting one of them.
+#
+#   contract      the canonical file over the tree as the run left it. Whether the sixteen
+#                 behaviours are implemented, and nothing else.
+#   legacy        the same, plus every test file in the package restored from the base commit.
+#                 Whether they are implemented AND the pre-existing public API survived.
+#
+# The restore is what made the second necessary and the first invisible. The canonical file calls
+# helpers it does not define - `reserveAndFinalize` lives in `rate_test.go` - and the base version of
+# that helper calls methods a refactor may have removed. So a run that reorganised the package's API
+# and migrated its tests to match fails to COMPILE under the restore, and scores zero with
+# `build_failed` before one canonical assertion runs. Measured on this campaign: eight runs across
+# three arms passed all sixteen on their own tree while being recorded as having solved nothing.
+#
+# The restore still earns its place, and that is why it stays: it is what stops a run passing by
+# weakening the very test that states the contract. Both facts are true, so both are reported.
+grade() {  # <graded-dir> <output-json>
+    local graded="$1" out="$2" report
+    ( cd "$graded" || exit 1
+      # `|| true`: a tree that has not implemented the bead fails these tests, which is the expected
+      # outcome for most runs and not an error in the scorer. The verdict is read from the report,
+      # never from the exit code.
+      report=$(go test -json -count=1 "$package" 2>&1) || true
+      printf '%s\n' "$report" | "$here/go_verdict.py" "$run_id" "${expected[@]}" > "$out" )
+}
 
-printf '%s\n' "$report" | "$here/go_verdict.py" "$run_id" "${expected[@]}"
+# Regime 1: the run's own tree, with only the contract replaced.
+contract_tree="$workdir/contract"
+mkdir -p "$contract_tree"
+cp -a "$source_tree/." "$contract_tree/"
+cp "$fixture" "$contract_tree/$target"
+grade "$contract_tree" "$workdir/contract.json"
+
+# Regime 2: the same, with the package's whole test surface back at the base commit.
+legacy_tree="$workdir/legacy"
+mkdir -p "$legacy_tree"
+cp -a "$source_tree/." "$legacy_tree/"
+while IFS= read -r test_file; do
+    [ -n "$test_file" ] || continue
+    git -C "$source_tree" show "$base_ref:$test_file" > "$legacy_tree/$test_file"
+done < <(git -C "$source_tree" ls-tree --name-only "$base_ref" "$package_dir/" | grep '_test\.go$' || true)
+cp "$fixture" "$legacy_tree/$target"
+grade "$legacy_tree" "$workdir/legacy.json"
+
+"$here/go_verdict.py" --merge "$run_id" "$workdir/contract.json" "$workdir/legacy.json"

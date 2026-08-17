@@ -83,6 +83,13 @@ def row(run_dir: pathlib.Path) -> dict:
         # A tree that does not build is the shape of a near-miss on this subject, not an unscored
         # run, so the flag belongs beside the score rather than only inside the verdict file.
         "build_failed": verdict.get("build_failed"),
+        # `section_a` above now answers "did it solve the bead" - the canonical file over the tree as
+        # the run left it. This is the other half, and it has to be printed rather than kept in the
+        # verdict: eight runs of this campaign solved the bead and broke the package's older tests
+        # by removing a public method those tests call, and while the two answers were one number
+        # every one of them read as having produced nothing. `None` is a verdict written before the
+        # scorer reported two regimes, not a pass.
+        "legacy_ok": verdict.get("pre_existing_tests_pass"),
         "committed": worktree.get("committed"),
         "files": worktree.get("diff_files"),
         "wall_s": int((ended - started).total_seconds()) if started and ended else None,
@@ -115,7 +122,8 @@ def main() -> int:
         print()
         return 0
 
-    columns = ["started", "run", "harness", "model", "outcome", "section_a", "committed", "wall_s", "turns", "input", "output"]
+    columns = ["started", "run", "harness", "model", "outcome", "section_a", "legacy_ok",
+               "committed", "wall_s", "turns", "input", "output"]
     widths = {c: max(len(c), *(len(str(r.get(c))) for r in rows)) if rows else len(c) for c in columns}
     print("  ".join(c.ljust(widths[c]) for c in columns))
     for item in rows:

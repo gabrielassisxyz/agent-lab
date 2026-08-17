@@ -57,7 +57,16 @@ def usable_runs(root: pathlib.Path, prefix: str) -> list[str]:
             continue
         if value.get("build_failed") or not value.get("scored"):
             continue
-        if value.get("passed") != value.get("total"):
+        # Read from the CONTRACT regime where the verdict carries both, and from the top level where
+        # it does not - a verdict written before the scorer reported two regimes has only the strict
+        # number, and treating its absence as a pass would put unsolved trees in the packet.
+        #
+        # The packet asks which implementation costs its next reader the most, which is a question
+        # about implementations that WORK. Removing a pre-existing public method is a finding about
+        # the design and belongs in the packet as one - it is not a reason to keep the entry out.
+        regimes = value.get("regimes") or {}
+        graded = regimes.get("contract") or value
+        if graded.get("passed") != graded.get("total"):
             continue
         found.append(directory.name)
     return found

@@ -69,7 +69,53 @@ def verdict(run_id: str, results: dict[str, str], expected: list[str] | None = N
     }
 
 
+def merge(run_id: str, contract: dict, legacy: dict) -> dict:
+    """One verdict carrying both regimes, with the top level answering "did it solve the bead".
+
+    WHY TWO. The scorer restores the package's whole test surface from the base commit before
+    applying the canonical file, so a run that removed a pre-existing public method fails to COMPILE
+    - the base helpers still call it - and scores zero before a single canonical assertion runs.
+    Zero then means "the older tests do not build", which is not what a reader takes from 0 of 16.
+
+    Measured across this campaign: eight runs across three arms passed all sixteen canonical tests
+    on their own tree and were recorded as having solved nothing. One arm's headline moved from 0 of
+    5 to 4 of 5 on that difference alone.
+
+    So the two questions are asked apart and both are kept:
+
+      contract                  the canonical file over the tree AS THE RUN LEFT IT. Did the
+                                sixteen behaviours get implemented.
+      contract_with_legacy_api  the same, with every test file in the package restored from the
+                                base. Did they get implemented AND did the pre-existing API survive.
+
+    The top level carries the first, because "completed the bead" is what the cost arithmetic
+    divides by. The second is not discarded - it becomes `pre_existing_tests_pass`, which is the
+    finding that used to be hidden inside a zero.
+    """
+    merged = dict(contract)
+    merged["run"] = run_id
+    merged["pre_existing_tests_pass"] = bool(
+        legacy.get("scored") and legacy.get("total") and legacy.get("passed") == legacy.get("total")
+    )
+    merged["regimes"] = {
+        "contract": {key: contract.get(key)
+                     for key in ("scored", "section_a", "passed", "total", "build_failed")},
+        "contract_with_legacy_api": {key: legacy.get(key)
+                                     for key in ("scored", "section_a", "passed", "total",
+                                                 "build_failed")},
+    }
+    return merged
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "--merge":
+        run_id, contract_path, legacy_path = sys.argv[2], sys.argv[3], sys.argv[4]
+        with open(contract_path) as handle:
+            contract = json.load(handle)
+        with open(legacy_path) as handle:
+            legacy = json.load(handle)
+        print(json.dumps(merge(run_id, contract, legacy)))
+        return 0
     run_id = sys.argv[1] if len(sys.argv) > 1 else "unknown"
     expected = sys.argv[2:] or None
     print(json.dumps(verdict(run_id, read_results(sys.stdin), expected)))

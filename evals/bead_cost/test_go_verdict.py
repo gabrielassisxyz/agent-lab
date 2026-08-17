@@ -7,6 +7,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import go_verdict  # noqa: E402
 from go_verdict import read_results, verdict  # noqa: E402
 
 
@@ -61,6 +62,51 @@ class Verdict(unittest.TestCase):
         result = verdict("r", {"TestA": "skip"})
         self.assertEqual({"TestA": False}, result["section_a"])
         self.assertEqual(0, result["passed"])
+
+
+class TwoRegimes(unittest.TestCase):
+    """The verdict has to say "solved the bead" and "kept the pre-existing API" separately.
+
+    Collapsed into one number, eight runs across three arms in this campaign were recorded as having
+    solved nothing while passing all sixteen canonical tests on their own tree - one arm's headline
+    moved from 0 of 5 to 4 of 5 on that difference alone.
+    """
+
+    def regime(self, passed: int, total: int = 16, build_failed: bool = False) -> dict:
+        section = {f"Test{n}": n < passed for n in range(total)}
+        return {"run": "r", "scored": True, "section_a": section,
+                "passed": passed, "total": total, "build_failed": build_failed}
+
+    def test_the_top_level_answers_whether_the_bead_was_solved(self):
+        merged = go_verdict.merge("r", self.regime(16), self.regime(0, build_failed=True))
+        self.assertEqual(merged["passed"], 16)
+        self.assertFalse(merged["build_failed"])
+
+    def test_the_pre_existing_api_is_reported_rather_than_folded_in(self):
+        """The run that removed a public method its package's older tests call: it solved the bead
+        AND it broke them, and both halves have to survive into the record."""
+        merged = go_verdict.merge("r", self.regime(16), self.regime(0, build_failed=True))
+        self.assertFalse(merged["pre_existing_tests_pass"])
+        self.assertEqual(merged["regimes"]["contract"]["passed"], 16)
+        self.assertEqual(merged["regimes"]["contract_with_legacy_api"]["passed"], 0)
+
+    def test_a_run_that_kept_everything_reports_both(self):
+        merged = go_verdict.merge("r", self.regime(16), self.regime(16))
+        self.assertTrue(merged["pre_existing_tests_pass"])
+        self.assertEqual(merged["passed"], 16)
+
+    def test_a_run_that_solved_nothing_stays_solved_nothing(self):
+        merged = go_verdict.merge("r", self.regime(0, build_failed=True),
+                                  self.regime(0, build_failed=True))
+        self.assertEqual(merged["passed"], 0)
+        self.assertTrue(merged["build_failed"])
+        self.assertFalse(merged["pre_existing_tests_pass"])
+
+    def test_a_partial_legacy_pass_is_not_a_pass(self):
+        """`pre_existing_tests_pass` is all or nothing on purpose: the older suite either still
+        holds against this tree or it does not, and a fraction of it would invite averaging."""
+        merged = go_verdict.merge("r", self.regime(16), self.regime(15))
+        self.assertFalse(merged["pre_existing_tests_pass"])
 
 
 if __name__ == "__main__":
