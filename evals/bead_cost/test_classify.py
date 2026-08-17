@@ -18,7 +18,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from classify import classify  # noqa: E402
 
 
-def _run(tmp: pathlib.Path, *, verdict=None, record=None, stderr: str = "") -> pathlib.Path:
+def _run(tmp: pathlib.Path, *, verdict=None, record=None, stderr: str = "",
+         stdout: str = "") -> pathlib.Path:
     run_dir = tmp / "run"
     run_dir.mkdir()
     if verdict is not None:
@@ -27,6 +28,8 @@ def _run(tmp: pathlib.Path, *, verdict=None, record=None, stderr: str = "") -> p
         (run_dir / "record.json").write_text(json.dumps(record))
     if stderr:
         (run_dir / "stderr.txt").write_text(stderr)
+    if stdout:
+        (run_dir / "stdout.txt").write_text(stdout)
     return run_dir
 
 
@@ -75,6 +78,42 @@ class ClassifyTest(unittest.TestCase):
 
     def test_a_run_with_no_artefacts_at_all_is_broken(self):
         self.assertEqual(self.outcome(), "broken")
+
+    def test_the_subject_repositorys_own_words_are_not_the_lane_failing(self):
+        """Measured on the first codex run of this subject, which was classified `unreachable`.
+
+        The codex lane streams events, and each shell command it runs comes back carrying its
+        output - so the repository under test, a rate limiter, put "Count rate limits per account"
+        and "a 429 whose stated delay has already elapsed" into the file this scan reads. The lane
+        was healthy and the model had answered.
+        """
+        stream = "\n".join(json.dumps(event) for event in [
+            {"type": "thread.started", "thread_id": "01a0106b"},
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "sed -n '1,240p' AGENTS.md",
+                "aggregated_output": "### Count rate limits per account\n"
+                                     "a 429 whose stated delay has already elapsed is upstream declining\n"}},
+            {"type": "turn.completed", "usage": {"input_tokens": 579176, "output_tokens": 2556}},
+        ])
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=stream), "no-diff")
+
+    def test_a_codex_lane_that_really_failed_is_still_unreachable(self):
+        """The other half: filtering the tool output must not filter the harness's own error."""
+        stream = "\n".join(json.dumps(event) for event in [
+            {"type": "thread.started", "thread_id": "01a0106b"},
+            {"type": "item.completed", "item": {
+                "type": "error", "message": "You've hit your usage limit. Try again later."}},
+        ])
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=stream), "unreachable")
+
+    def test_a_lane_that_is_not_codex_still_reads_its_whole_stdout(self):
+        """The filter is scoped to the streaming harness. The envelope lanes print nothing but their
+        own envelope, so narrowing the scan for them would only lose evidence."""
+        envelope = json.dumps({"status": "ERROR", "error": "429 Too Many Requests"})
+        record = dict(CLEAN, harness="agy")
+        self.assertEqual(self.outcome(record=record, stdout=envelope), "unreachable")
 
 
 if __name__ == "__main__":

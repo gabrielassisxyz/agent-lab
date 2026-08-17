@@ -30,8 +30,11 @@ import sys
 # simply produced no diff was recorded as one that never reached the model. The two mean opposite
 # things - one is a lane that could not be used, the other is an answer the model declined to give -
 # and the second is charged to the model while the first rests the lane for a round.
+# `usage limit` is codex's own wording for the same condition the other lanes call a quota, and it
+# shares none of their vocabulary: a lane exhausted mid-round would otherwise be classified as a
+# model that produced nothing, which charges the lane's failure to the model and never rests it.
 UNREACHABLE = re.compile(
-    r"(?<!\d)429(?!\d)|rate.?limit|quota|authentication failed|not logged in"
+    r"(?<!\d)429(?!\d)|rate.?limit|quota|usage limit|authentication failed|not logged in"
     r"|no such model|model .* not found",
     re.IGNORECASE,
 )
@@ -71,6 +74,56 @@ def last_stop_reason(record: dict | None) -> str | None:
     return stop
 
 
+def harness_text(run_dir: pathlib.Path, record: dict | None) -> str:
+    """The text the HARNESS wrote about itself - never what the agent's tools printed.
+
+    On three of the four lanes stdout is one envelope and the distinction costs nothing. The codex
+    lane streams events, and every shell command it runs comes back with its `aggregated_output`
+    inside them, so the SUBJECT REPOSITORY'S OWN TEXT lands in the file this scan reads.
+
+    That is not hypothetical. The first codex run on this subject read the repository's AGENTS.md,
+    which documents a rate limiter - "Count rate limits per account", "a 429 whose stated delay has
+    already elapsed" - and the classifier called the lane unreachable. The lane was fine and the
+    model had answered; a lane that could not be used and a model that declined to act mean opposite
+    things, and one of them rests the lane for a round.
+
+    So for a stream the scan keeps the harness's own surface: lines that are not events at all
+    (whatever a wrapper printed around the run) and events that report an error. The agent's prose
+    is left out with the tool output, for the same reason - a model quoting the repository's docs is
+    not a lane that ran out of quota.
+    """
+    text = ""
+    try:
+        text += (run_dir / "stderr.txt").read_text(errors="replace")
+    except OSError:
+        pass
+
+    try:
+        stdout = (run_dir / "stdout.txt").read_text(errors="replace")
+    except OSError:
+        return text
+
+    if (record or {}).get("harness") != "codex":
+        return text + stdout
+
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            text += line + "\n"
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            text += line + "\n"
+            continue
+        if not isinstance(event, dict):
+            continue
+        item = event.get("item") if isinstance(event.get("item"), dict) else {}
+        if event.get("type") in ("error", "turn.failed") or item.get("type") == "error":
+            text += json.dumps(event) + "\n"
+    return text
+
+
 def classify(run_dir: pathlib.Path) -> str:
     verdict = read_json(run_dir / "verdict.json")
     record = read_json(run_dir / "record.json")
@@ -98,13 +151,7 @@ def classify(run_dir: pathlib.Path) -> str:
         return "wrong"
 
     # Only now, with nothing produced, does the reason matter.
-    blob = ""
-    for name in ("stderr.txt", "stdout.txt"):
-        try:
-            blob += (run_dir / name).read_text(errors="replace")
-        except OSError:
-            pass
-    if UNREACHABLE.search(blob):
+    if UNREACHABLE.search(harness_text(run_dir, record)):
         return "unreachable"
 
     if record is not None:
