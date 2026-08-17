@@ -14,7 +14,7 @@
 # 357 MB of crates and 172 MB of npm downloaded inside a measured hour and reported as the model's
 # time.
 #
-#   ./run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude
+#   ./run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude | codex
 #
 # A LANE is the pair (harness, model): the same model through two harnesses is not one
 # measurement, because one reports an envelope total and the other a per-turn sum. The two halves
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 run_id="${1:?usage: run.sh <run-id> <harness> [<model>]}"
-harness="${2:?usage: run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude}"
+harness="${2:?usage: run.sh <run-id> <harness> [<model>]   harness: pi | agy | claude | codex}"
 model="${3:-}"
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -42,12 +42,21 @@ case "$harness" in
     pi)     model="${model:-litellm/deepseek-v4-pro-max-k1}" ;;
     agy)    model="${model:-gemini-3.7-flash-medium}" ;;
     claude) model="${model:-sonnet}" ;;
-    *)      echo "run: unknown harness '$harness' (expected pi, agy or claude)" >&2; exit 2 ;;
+    codex)  model="${model:-gpt-5.6-terra}" ;;
+    *)      echo "run: unknown harness '$harness' (expected pi, agy, claude or codex)" >&2; exit 2 ;;
 esac
 # The claude lane runs under a named account's own token rather than whatever file-based auth
 # happens to hold, because file auth carries one account at a time and a run against the wrong one
 # starts normally and looks correct. `claude-as` refuses an unknown account instead of falling back.
 claude_account="${BEAD_COST_CLAUDE_ACCOUNT:-primary}"
+# Reasoning effort is a lane-defining setting on the codex harness and it is passed EXPLICITLY, not
+# inherited. The machine's own `~/.codex/config.toml` carries one, that file is copied into the
+# sandbox as a constant like every other config, and a value edited there between two rounds would
+# move the arm without changing anything this experiment records. The same axis on the deepseek
+# lanes was worth 2.2x in output tokens and the difference between 0 and 5 passes out of 5, so it
+# is not a detail that can be left to whatever the machine happens to hold. What actually ran is
+# read back out of the run's own trajectory by `collect.py`, rather than trusted from here.
+codex_effort="${BEAD_COST_CODEX_EFFORT:-medium}"
 
 run_dir="$root/$run_id"
 run_home="$run_dir/home"
@@ -213,6 +222,30 @@ case "$harness" in
             --dangerously-skip-permissions \
             --output-format json \
             -p "$(cat "$run_dir/prompt.txt")" \
+            < /dev/null > "$run_dir/stdout.txt" 2> "$run_dir/stderr.txt"
+        ;;
+    codex)
+        # `< /dev/null` is not optional: `codex exec` waits on stdin forever without it, and the
+        # symptom is a silent stall indistinguishable from a model thinking hard.
+        #
+        # `--dangerously-bypass-approvals-and-sandbox` is the flag its own help reserves for
+        # "environments that are externally sandboxed", which is exactly this one: the call already
+        # runs inside ai-jail, whose mapping is the run's own worktree. Without it codex cannot
+        # write, and a lane that cannot edit a file produces a no-diff that reads as a model failure.
+        #
+        # `mcp_servers={}` on the command line rather than an edited config: the copied
+        # `config.toml` carries this machine's MCP servers, and ai-memory among them writes and
+        # reads back, which is the contamination `sandbox.sh` exists to prevent. Overriding at the
+        # call site keeps the copied config a copy.
+        #
+        # `--json` makes the usage readable. Without it the harness prints prose and the run's
+        # token counts have to be recovered from the rollout alone.
+        jailed timeout "$run_timeout" codex exec --json \
+            -m "$model" \
+            -c "model_reasoning_effort=\"$codex_effort\"" \
+            -c 'mcp_servers={}' \
+            --dangerously-bypass-approvals-and-sandbox \
+            "$(cat "$run_dir/prompt.txt")" \
             < /dev/null > "$run_dir/stdout.txt" 2> "$run_dir/stderr.txt"
         ;;
     agy)

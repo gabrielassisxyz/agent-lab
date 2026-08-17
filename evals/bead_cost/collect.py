@@ -242,6 +242,106 @@ def read_claude_envelope(stdout: pathlib.Path) -> dict | None:
     }
 
 
+def read_codex_rollout(run_home: pathlib.Path) -> dict:
+    """Turns, the effort that actually ran, and a token fallback, from codex's own rollout log.
+
+    Two things live only here.
+
+    TURNS. The event stream on stdout reports one `turn.completed` for the whole run, so counting it
+    gives 1 for a run of any length - the same shape that left the agy lane's turn column constant
+    across the dimension it should vary on. The rollout carries one `token_count` event per model
+    call, each with its own `last_token_usage`, and that count is the analogue of what the other
+    lanes call a turn.
+
+    THE EFFORT. `turn_context` records the model and the reasoning effort the run was actually
+    given. It is read rather than trusted from the command line because that is the difference
+    between recording a setting and recording what happened: on the deepseek lanes the same axis
+    was worth 2.2x in output tokens and the difference between passing 5 of 5 and 0 of 5, and a
+    value edited in the machine's config between two rounds would otherwise move an arm silently.
+    """
+    found = {"turns": None, "effort": None, "model_ran": None, "rollout": None, "totals": None}
+    sessions = run_home / ".codex" / "sessions"
+    logs = sorted(sessions.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime) if sessions.exists() else []
+    if not logs:
+        return found
+
+    log = logs[-1]
+    found["rollout"] = str(log)
+    calls = 0
+    for line in log.read_text(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if event.get("type") == "turn_context":
+            found["effort"] = payload.get("effort") or found["effort"]
+            found["model_ran"] = payload.get("model") or found["model_ran"]
+        if payload.get("type") == "token_count":
+            info = payload.get("info")
+            if isinstance(info, dict) and isinstance(info.get("last_token_usage"), dict):
+                calls += 1
+                if isinstance(info.get("total_token_usage"), dict):
+                    found["totals"] = info["total_token_usage"]
+    found["turns"] = calls or None
+    return found
+
+
+def read_codex_stream(stdout: pathlib.Path, run_home: pathlib.Path | None = None) -> dict | None:
+    """Read a `codex exec --json` run: one JSONL event per line, usage on the last `turn.completed`.
+
+    NOT an envelope, despite arriving at the end. codex reports `input_tokens` as the sum over its
+    model calls - measured: three calls of 13 551, 14 064 and 14 214 against a reported 41 829 - so
+    it is the same quantity the pi lane sums per turn and NOT the billed total the claude and agy
+    envelopes carry. The note travels with the number, because the two are two lines apart in the
+    results table and nothing else says they are different quantities.
+
+    Unlike the Ollama lanes it does report cache reads, so a 0 here is a reading rather than a
+    field with a default.
+    """
+    rollout = read_codex_rollout(run_home) if run_home else {}
+    usage = None
+    if stdout.exists():
+        for line in reversed(stdout.read_text(errors="replace").splitlines()):
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict) and event.get("type") == "turn.completed" \
+                    and isinstance(event.get("usage"), dict):
+                usage = event["usage"]
+                break
+    # The rollout's running total is the same set of numbers by another route. It is the fallback
+    # for a run whose stdout never carried the closing event - killed, or truncated - where the
+    # tokens were still spent and are still recoverable.
+    source = "turn.completed on stdout"
+    if usage is None:
+        usage = rollout.get("totals")
+        source = "rollout token_count total; stdout carried no closing event"
+    if usage is None:
+        return None
+
+    return {
+        "session_log": rollout.get("rollout") or str(stdout),
+        "turns": rollout.get("turns"),
+        "turns_source": "rollout token_count events, one per model call",
+        "usage_source": source,
+        "model_ran": rollout.get("model_ran"),
+        "reasoning_effort_ran": rollout.get("effort"),
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+        "cache_read_tokens": usage.get("cached_input_tokens"),
+        "cache_write_tokens": usage.get("cache_write_input_tokens"),
+        "reasoning_tokens": usage.get("reasoning_output_tokens"),
+        "input_note": "summed over the run's model calls, as pi's is; not comparable with an "
+                      "envelope-reported total",
+    }
+
+
 def read_worktree(worktree: pathlib.Path) -> dict:
     """What the run left behind: whether it committed, and how large the change was."""
 
@@ -331,8 +431,14 @@ def main() -> int:
     # The claude harness is dispatched by name rather than left to the fallthrough: its envelope also
     # carries a `usage` dict, so agy's reader would parse it and return a record that is wrong in
     # the fields it happens to share and silently empty in the rest.
+    # codex is dispatched by name for the same reason claude is, and more sharply: its stdout is a
+    # STREAM of JSON objects rather than one, so the tolerant envelope reader finds a first line that
+    # parses (`thread.started`) and returns it - an object with no usage in it at all, which reads
+    # downstream as a harness that reports nothing.
     if record["harness"] == "claude":
         usage = read_claude_envelope(args.run_dir / "stdout.txt")
+    elif record["harness"] == "codex":
+        usage = read_codex_stream(args.run_dir / "stdout.txt", args.run_dir / "home")
     else:
         session_dir = args.session_dir or (args.run_dir / "home" / ".pi" / "agent" / "sessions")
         usage = read_pi_session(session_dir) if session_dir.exists() else None

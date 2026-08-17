@@ -310,6 +310,39 @@ else
                 needle="${BEAD_COST_CLAUDE_ACCOUNT:-primary}"
                 subject="the claude account '$needle'"
                 ;;
+            # codex publishes no catalogue a gate can list without spending a request, but it ships
+            # one on disk: the model cache the CLI itself reads. The ids come out of the copy inside
+            # the sandbox, and only if the credential came across with it - a lane with a catalogue
+            # and no token starts normally and dies on the first call, which is the failure this
+            # gate exists to move earlier. Both halves are therefore one answer: no auth, no ids, and
+            # the message below already says "catalog or credentials".
+            codex)
+                # The single quotes are the point: `$HOME` must be expanded by the shell INSIDE the
+                # jail, where it is the run's own home, and not by this one, where it is the
+                # machine's. Expanded out here the gate would read the operator's real catalogue and
+                # certify a sandbox that never received one.
+                # shellcheck disable=SC2016
+                lane_models=$(jail sh -c '
+                    [ -s "$HOME/.codex/auth.json" ] || exit 0
+                    python3 -c "
+import json, pathlib, sys
+cache = pathlib.Path.home() / \".codex/models_cache.json\"
+if not cache.exists():
+    sys.exit(0)
+ids = set()
+def walk(node):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in (\"id\", \"slug\", \"model\") and isinstance(value, str):
+                ids.add(value)
+            walk(value)
+    elif isinstance(node, list):
+        for item in node:
+            walk(item)
+walk(json.loads(cache.read_text()))
+print(\" \".join(sorted(ids)))
+"' 2>/dev/null || true)
+                ;;
             *)   lane_models=$(jail pi --list-models 2>/dev/null || true) ;;
         esac
         # Matched in the shell, NOT through `… | grep -q`. Under `pipefail` that pipeline is a

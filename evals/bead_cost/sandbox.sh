@@ -46,6 +46,21 @@ copy_constant "$HOME/.claude/settings.json"        ".claude/settings.json"
 copy_constant "$HOME/.claude/skills"               ".claude/skills"
 copy_constant "$HOME/.codex/AGENTS.md"             ".codex/AGENTS.md"
 copy_constant "$HOME/.codex/skills"                ".codex/skills"
+# codex resolves its home from HOME, so a run with an overridden HOME reads THIS config and no
+# other - measured, including that nothing lands back in the real `~/.codex/sessions`. The file is
+# copied for the same reason every other harness's config is: it is a constant, identical for every
+# lane, so it cancels in a comparison of lanes, and a lane stripped of it measures a machine nobody
+# owns. Its MCP servers are neutralised at the call site rather than here, so this stays a copy.
+#
+# `hooks.json` is deliberately NOT copied. Those hooks fire on session start, and in a
+# non-interactive run they have been observed taking the turn over to announce chores instead of
+# doing the work asked for - which would be recorded as the model wandering off.
+copy_constant "$HOME/.codex/config.toml"           ".codex/config.toml"
+# The model catalogue codex keeps on disk. It is copied so the pre-flight gate can reject a model id
+# this harness does not serve WITHOUT spending a request - the gate that accepts an unknown id is
+# worse than no gate, because it builds the environment, warms the build and fails inside the
+# measured window.
+copy_constant "$HOME/.codex/models_cache.json"     ".codex/models_cache.json"
 copy_constant "$HOME/.gemini/GEMINI.md"            ".gemini/GEMINI.md"
 copy_constant "$HOME/.pi/agent/AGENTS.md"          ".pi/agent/AGENTS.md"
 # pi keeps its provider catalog, its auth and its extensions beside that file, and all three are
@@ -74,6 +89,9 @@ done
 # token refresh inside one run rewrite what every later run authenticates with.
 copy_constant "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ".gemini/antigravity-cli/antigravity-oauth-token"
 copy_constant "$HOME/.claude/.credentials.json" ".claude/.credentials.json"
+# The codex lane's credential. Without it the run starts, reaches the model, and comes back in
+# seconds having spent nothing - the same shape as the agy lane's missing Antigravity token.
+copy_constant "$HOME/.codex/auth.json"          ".codex/auth.json"
 copy_constant "$HOME/.config/zsh/secrets"       ".config/zsh/secrets"
 copy_constant "$HOME/.config/gh"                ".config/gh"
 
