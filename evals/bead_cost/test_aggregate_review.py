@@ -93,15 +93,43 @@ class Verdict(unittest.TestCase):
         self.assertIn("no invalidating condition triggered", out)
         self.assertIn("1. E", out)
 
-    def test_the_reference_ranked_last_invalidates_the_result(self):
+    def test_the_reference_ranked_last_is_flagged_and_still_publishes(self):
+        # It used to invalidate, on the assumption that the reference was known-good. It was not:
+        # that commit came out of the same kind of agent run as the candidates. So the panel putting
+        # it last is a claim about that implementation, and discarding the review over it would
+        # throw away the answer for disagreeing with the thing it was asked to judge.
         answers, key = write_panel(self.tmp, {
             "codex": ["A", "B", "C", "D", "E"],
             "glm": ["A", "B", "C", "D", "E"],
         })
         code, out = run(answers, key)
-        self.assertEqual(2, code)
+        self.assertEqual(0, code)
+        self.assertIn("ATTENTION", out)
         self.assertIn("ranked LAST", out)
+        self.assertNotIn("must not be published", out)
+
+    def test_a_missing_conflict_free_reviewer_invalidates_the_ranking(self):
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "B", "C", "D"],
+            "opus": ["E", "B", "A", "C", "D"],
+            "gemini": ["E", "C", "A", "B", "D"],
+        })
+        code, out = run(answers, key)
+        self.assertEqual(2, code)
+        self.assertIn("conflict-free reviewer is missing", out)
         self.assertIn("must not be published", out)
+
+    def test_a_missing_conflicted_reviewer_is_flagged_and_still_publishes(self):
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "B", "C", "D"],
+            "glm": ["E", "A", "C", "B", "D"],
+            "opus": ["E", "B", "A", "C", "D"],
+        })
+        (answers / "passB-gemini.txt").write_text(json.dumps({"status": "SUCCESS", "response": ""}))
+        code, out = run(answers, key)
+        self.assertEqual(0, code)
+        self.assertIn("ATTENTION", out)
+        self.assertIn("gemini", out)
 
     def test_an_envelope_answer_still_counts_as_a_reviewer(self):
         answers, key = write_panel(self.tmp, {
@@ -125,6 +153,17 @@ class Verdict(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("MISSING from the ranking", out)
         self.assertIn("gemini", out)
+
+    def test_reviewers_that_scatter_still_invalidate(self):
+        # The check that survives the reference losing its status: agreement between reviewers is
+        # independent of whether the reference was any good.
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "B", "C", "D"],
+            "glm": ["D", "C", "B", "A", "E"],
+        })
+        code, out = run(answers, key)
+        self.assertEqual(2, code)
+        self.assertIn("do not correlate", out)
 
 
 if __name__ == "__main__":

@@ -13,10 +13,13 @@ way: the question is about the design of the implementation, which passes 1 and 
 cleared of defects; and the reference entry changed no test file at all, so including tests would
 make the entries structurally different in a way that has nothing to do with their quality.
 
-THE REFERENCE ENTRY IS NOT LABELLED. The commit that actually landed this bead is placed among the
-others under the same kind of letter, and no reviewer is told it exists. If the panel ranks it last,
-the exercise is noise and its findings are discarded however well they read. Nothing else in this
-design can falsify it.
+THE REFERENCE ENTRY IS NOT LABELLED, and it is not a control either. The commit that actually
+landed this bead is placed among the others under the same kind of letter, and no reviewer is told
+it exists - but it was produced the same way the candidates were, by an agent working on a
+repository that took dozens of commits the same day, and the only thing marking it as good is that
+it was merged. So where the panel puts it falsifies nothing: last is a claim about that
+implementation, not about the review. What falsifies the exercise is whether the reviewers agree
+with each other at all, and whether the blinding held.
 
 BLINDING, mechanically rather than by good intentions:
 
