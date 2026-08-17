@@ -13,8 +13,12 @@ WHAT IT REPORTS
     over orderings throws away exactly what makes an ordering useful.
   - whether the reviewers agree with each other at all, as pairwise Spearman correlation. Four
     orderings that scatter mean the metric has no signal, however well the prose reads.
-  - where the REFERENCE implementation landed. It is the control: near the top and the exercise has
-    signal; last and the result is discarded.
+  - where the REFERENCE implementation landed. It is NOT a control, and the difference matters:
+    that commit was produced the same way the candidates were, by an agent working on a repository
+    where dozens of commits landed the same day, and nothing but having been merged marks it as
+    good. So its position falsifies nothing. Last is a result worth reading - the merged
+    implementation may genuinely cost more later than four candidates - and first is not evidence
+    of signal either. It is reported loudly and it does not decide validity.
   - self-preference: whether a reviewer placed its own family's implementation above where the
     conflict-free reviewers placed it.
   - findings from pass A, marked corroborated (both reviewers raised it) or single-source.
@@ -191,16 +195,28 @@ def main() -> int:
 
     print("\n=== validity, decided by the rules fixed before the answers existed ===")
     print(f"  panel: {len(rankings)} usable ranking(s) from {sorted(rankings)}")
-    if unusable_b:
-        print(f"  MISSING from the ranking: {sorted(unusable_b)} - every number above is averaged "
-              f"without them")
-    if unusable_a:
-        print(f"  MISSING from the findings: {sorted(unusable_a)} - corroboration below is weaker "
-              f"than it looks wherever one of the two reviewers is absent")
     failures = []
+    attention = []
+
+    # A missing reviewer is not one kind of loss. The conflict-free pair IS the reference the
+    # conflicted two are measured against, and one ordering cannot tell a biased reviewer from a
+    # merely different one - so losing either of them takes the measurement with it. Losing a
+    # conflicted reviewer costs one question and leaves the rest standing.
+    missing_clean = sorted(CONFLICT_FREE - set(rankings))
+    if missing_clean:
+        failures.append(f"a conflict-free reviewer is missing from the ranking ({missing_clean}); "
+                        f"self-preference has no baseline left to measure against")
+    if unusable_b:
+        attention.append(f"MISSING from the ranking: {sorted(unusable_b)} - every number above is "
+                         f"averaged without them")
+    if unusable_a:
+        attention.append(f"MISSING from the findings: {sorted(unusable_a)} - corroboration is "
+                         f"weaker than it looks wherever one of the two reviewers is absent")
+
     ref_position = aggregate.index(reference) + 1
     if ref_position == len(aggregate):
-        failures.append(f"the reference implementation ranked LAST ({ref_position} of {len(aggregate)})")
+        attention.append(f"the reference entry ranked LAST ({ref_position} of {len(aggregate)}) - "
+                         f"read it as a finding about that implementation, not about the review")
     if median_rho is not None and median_rho < 0.2:
         failures.append(f"reviewer orderings do not correlate (median rho {median_rho:+.2f})")
     # The question asked is family recognition, not self-recognition, and the distinction is not
@@ -217,6 +233,11 @@ def main() -> int:
             failures.append(
                 f"{reviewer} picked out its own family's entry ({guess}) in the blinding check, "
                 f"so its ranking of that entry cannot be treated as blind")
+
+    if attention:
+        print("  ATTENTION - true, and not a reason to discard anything:")
+        for a in attention:
+            print(f"    - {a}")
 
     if failures:
         print("  INVALID:")
