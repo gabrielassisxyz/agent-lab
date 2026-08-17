@@ -1,5 +1,7 @@
 # The qualitative review, and the implementation that ranked last was the one that shipped
 
+> **Two of the positions below did not survive replication, and the page is kept as it stands because it is what one packet said.** Running the comparative pass against five more packets, each holding a different run of every arm, moved kimi-k2.7 from third to fourth and gemini-3.7-flash from fourth to third; the two runs drawn here were an unusually good one and an unusually poor one for their arms. It also showed the head of this table to be a tie rather than an ordering - sonnet and deepseek pro-high split their head-to-head ten to ten across twenty orderings. What replicated unchanged is the reference commit at the bottom, and that no other arm reaches second place. See [`qualitative-review-replicated-2026-08-17.md`](qualitative-review-replicated-2026-08-17.md), which also carries the measurement floor these numbers should be read against.
+
 Four reviewers, eighteen calls, five blinded implementations of `llmux-p4-two-phase-reservation-5vg`. The question is the one no deterministic tool answers: **how much future work did this implementation create for whoever extends this package next?**
 
 The headline is not the ordering. It is that the anonymous fifth entry — the commit that actually landed this bead on `master` — came last, and that three of the four reviewers independently named the same decision inside it as the worst single decision in the whole set.
