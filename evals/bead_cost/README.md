@@ -86,6 +86,22 @@ Because `docs/DESIGN.md` §6–§10 is the record of this exact class of experim
 | `trail.py` | follow a pi session live, or read a finished one |
 | `agy_trail.py` | the same for agy, which does not stream and keeps its trajectory in SQLite |
 
+**Reviewing what came out**
+
+The machinery above answers *did this run solve the bead*. These answer the question no deterministic tool touches - **how much future work did this implementation create** - and they are a different instrument with different failure modes. The runbook is [`docs/qualitative-review.md`](../../docs/qualitative-review.md), and it is worth reading before spending a reviewer: most of it is traps that produced a well-formed report while dropping or inventing an answer.
+
+| file | what |
+| --- | --- |
+| `build_review_packet.py` | build the blinded packet every reviewer reads, and print its hash. Reviewers given different text are not a second opinion, they are a second experiment |
+| `review-isolate.sh` | narrow the sandbox to the packet alone and prove it from INSIDE, with a negative control on the check itself. Also the `-- <cmd>` path every reviewer call runs through |
+| `run-review.sh` | the calls, in two waves and in lanes whose count is each CLI's concurrency cap. `--probe` spends four calls proving the invocations; `--pass-b` repeats the comparative pass alone, which is how the measurement floor is taken |
+| `aggregate_review.py` · `test_aggregate_review.py` | decode one packet's answers, aggregate by mean rank, and state validity as a verdict. The tests pin the three ways a correct answer was read wrongly |
+| `build_replicates.py` | one packet per replicate, drawing a different run of every arm from a seeded manifest. One packet ranks runs; only replication ranks arms |
+| `aggregate_replicates.py` · `test_replicates.py` | position per ARM across replicates, with Kendall's W and a Friedman test written in the standard library and checked against printed tables |
+| `review/prompt-pass-a.md` · `prompt-pass-b.md` | the absolute pass, which produces the findings, and the comparative pass, which produces the ordering |
+| `review/prompt-blinding-check.md` | asked in a separate call, after the answers are on disk, so it cannot influence them |
+| `review/prompt-probe.md` · `review/schema-*.json` | the probe, and the three schemas `agy` is handed |
+
 ### Three defaults that are this bead's, not generic
 
 - **`score-go.sh` carries `5vg`'s fixture, path and package** in `BEAD_COST_GO_FIXTURE`, `BEAD_COST_GO_FIXTURE_PATH` and `BEAD_COST_GO_PACKAGE`. A different bead needs all three set, or it silently grades the wrong package.
