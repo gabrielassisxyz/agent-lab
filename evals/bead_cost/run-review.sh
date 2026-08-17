@@ -2,7 +2,15 @@
 # Drive the qualitative review: every reviewer, both passes, one command.
 #
 #   ./run-review.sh <packet-dir> [<out-dir>]
-#   ./run-review.sh --probe <packet-dir> [<out-dir>]   one trivial call per reviewer, then stop
+#   ./run-review.sh --probe <packet-dir> [<out-dir>]    one trivial call per reviewer, then stop
+#   ./run-review.sh --pass-b <packet-dir> <out-dir>     the comparative pass alone, four calls
+#
+# `--pass-b` EXISTS TO MEASURE THE INSTRUMENT, not to save calls. Run against the SAME packet into a
+# fresh output directory, it repeats the comparative pass with nothing changed - same entries, same
+# lettering, same prompts, same flags, same GLM account - so every difference between the orderings
+# it produces is the panel disagreeing with itself. Without that number, a position that moves
+# between two runs cannot be told apart from a reviewer that was never stable to begin with, and
+# there is no reading of "the arm varies" that survives not knowing which one it was.
 #
 # THE PROBE RUNS THROUGH THE SAME FUNCTIONS AS THE REAL PASSES, and that is the only reason it is
 # worth anything. What fails on the first launch is never the prompt: it is a flag this CLI rejects,
@@ -29,8 +37,12 @@ set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 probe_only=0
-[ "${1:-}" = "--probe" ] && { probe_only=1; shift; }
-packet_dir="${1:?usage: run-review.sh [--probe] <packet-dir> [<out-dir>]}"
+pass_b_only=0
+case "${1:-}" in
+    --probe)  probe_only=1; shift ;;
+    --pass-b) pass_b_only=1; shift ;;
+esac
+packet_dir="${1:?usage: run-review.sh [--probe|--pass-b] <packet-dir> [<out-dir>]}"
 packet_dir="$(cd "$packet_dir" && pwd)"
 # The answers live OUTSIDE the packet directory, and that is independence rather than tidiness.
 # `agy` keeps its tools, and its calls run after the ones that answer earlier, so a default of
@@ -255,14 +267,31 @@ build_prompt "$review/prompt-pass-b.md" "$packet_dir/packet.md" "$prompt_b"
 prompt_c="$out_dir/.prompt-blinding.txt"
 build_prompt "$review/prompt-blinding-check.md" "$packet_dir/packet.md" "$prompt_c"
 
+# The four comparative calls, named once and used by both paths below, so a repeat run cannot drift
+# from the run it is being compared against. The GLM account is pinned to the same slot for the same
+# reason: an account is a variable, and this measurement has to have only one.
+pass_b_lanes=(
+    "passB-codex|ask_codex|$prompt_b|"
+    "passB-glm|ask_glm|$prompt_b|1"
+    "passB-gemini|ask_gemini|$prompt_b|$review/schema-pass-b.json"
+    "passB-opus|ask_opus|$prompt_b|"
+)
+
+if [ "$pass_b_only" -eq 1 ]; then
+    printf '%s  PASS B ALONE - 4 calls, identical to the ones in a full run\n' "$(stamp)"
+    run_lanes "${pass_b_lanes[@]}"
+    printf '%s  DONE - compare this ordering with the other runs of the same packet\n' "$(stamp)"
+    exit 0
+fi
+
 # --- wave 1: pass A and pass B ---------------------------------------------------------------
 #
 # The comparative call heads codex's first lane deliberately. It is the half that carries the
 # ranking, and putting it first means the answer worth reading arrives while the five absolute
 # calls behind it are still running.
 
-codex_queue=("passB-codex|ask_codex|$prompt_b|")
-glm_queue=("passB-glm|ask_glm|$prompt_b|1")
+codex_queue=("${pass_b_lanes[0]}")
+glm_queue=("${pass_b_lanes[1]}")
 slot=1
 for letter in "${letters[@]}"; do
     codex_queue+=("passA-$letter-codex|ask_codex|${prompt_a[$letter]}|")
@@ -286,8 +315,7 @@ for spec in "${glm_queue[@]}"; do glm_lanes+=("$spec"); done
 
 printf '%s  WAVE 1 - pass A and pass B, %s calls\n' "$(stamp)" "$(( ${#codex_queue[@]} + ${#glm_queue[@]} + 2 ))"
 run_lanes "$codex_lane_1" "$codex_lane_2" "${glm_lanes[@]}" \
-    "passB-gemini|ask_gemini|$prompt_b|$review/schema-pass-b.json" \
-    "passB-opus|ask_opus|$prompt_b|"
+    "${pass_b_lanes[2]}" "${pass_b_lanes[3]}"
 
 # --- wave 2: the blinding check, one call per reviewer ------------------------------------------
 
