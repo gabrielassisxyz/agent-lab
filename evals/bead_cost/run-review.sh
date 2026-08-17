@@ -78,11 +78,17 @@ ask_codex() {  # <prompt-file> <out-file>
         "$(cat "$1")" < /dev/null > "$2" 2>&1
 }
 
-ask_glm() {  # <prompt-file> <out-file>
+ask_glm() {  # <prompt-file> <out-file> <account-slot>
     # `--no-tools` is the point: the packet is in the prompt, so a reviewer that can run nothing can
     # still answer, and cannot go looking for anything.
-    jailed pi -p --model litellm/glm-5.2-k1 --no-tools --no-session --no-extensions --no-skills \
-        "$(cat "$1")" < /dev/null > "$2" 2>&1
+    #
+    # The account is an ARGUMENT rather than a counter because the calls run in parallel lanes and a
+    # counter incremented inside a background subshell is lost to its parent. Naming the slot where
+    # the call is declared keeps the assignment deterministic, reproducible and greppable. The lane
+    # limit here is a request rate PER ACCOUNT - the same reason the campaign's sweep rotates these
+    # three keys - so calls that overlap must not share one.
+    jailed pi -p --model "litellm/glm-5.2-k${3:-1}" --no-tools --no-session --no-extensions \
+        --no-skills "$(cat "$1")" < /dev/null > "$2" 2>&1
 }
 
 ask_gemini() {  # <prompt-file> <out-file> <schema-file>
@@ -151,15 +157,24 @@ sys.exit(0 if filled else 1)
 PY
 }
 
-call() {  # <label> <reviewer-fn> <prompt-file> [<schema>]
-    local label="$1" fn="$2" prompt="$3" schema="${4:-}"
+call() {  # <label> <reviewer-fn> <prompt-file> [<extra>]
+    # `extra` is the reviewer-specific third argument: a schema path for agy, an account slot for
+    # GLM. One slot rather than two named ones, because only ever one of them applies per reviewer.
+    local label="$1" fn="$2" prompt="$3" extra="${4:-}"
     local out="$out_dir/$label.txt"
     if answered "$out"; then
         printf '%s  skip   %s (already answered)\n' "$(stamp)" "$label"
         return 0
     fi
+    # A fan-out of eighteen paid calls is worth being able to read before it is worth running. This
+    # prints what each lane would ask, with the account slot and schema it would pass, and spends
+    # nothing: BEAD_COST_REVIEW_DRYRUN=1.
+    if [ -n "${BEAD_COST_REVIEW_DRYRUN:-}" ]; then
+        printf '%s  PLAN   %-18s %-11s %s\n' "$(stamp)" "$label" "$fn" "${extra:-<none>}"
+        return 0
+    fi
     printf '%s  ask    %s\n' "$(stamp)" "$label"
-    if [ -n "$schema" ]; then "$fn" "$prompt" "$out" "$schema"; else "$fn" "$prompt" "$out"; fi
+    if [ -n "$extra" ]; then "$fn" "$prompt" "$out" "$extra"; else "$fn" "$prompt" "$out"; fi
     if answered "$out"; then
         printf '%s  got    %s (%s bytes)\n' "$(stamp)" "$label" "$(wc -c < "$out")"
     else
@@ -185,32 +200,101 @@ if [ "$probe_only" -eq 1 ]; then
     exit 0
 fi
 
-# --- pass A: absolute, one implementation per call, by the two conflict-free reviewers ----------
+# --- how the eighteen calls are spread ------------------------------------------------------------
+#
+# LANES, NOT A SCHEDULER. Each lane is a sequential worker over its own list, so the number of lanes
+# a reviewer gets IS its concurrency cap and there is nothing to schedule, queue or tune. This
+# script exists because three of the pilot's five environment defects were steps run by hand in the
+# wrong order; replacing it with something clever enough to have its own bugs would undo the reason
+# it was written.
+#
+# The caps, and where each comes from:
+#   codex   2  - what its quota takes. It has the most calls, so it sets the wall-clock either way.
+#   glm     1 per call, six at once - the limit is a request rate PER ACCOUNT and three accounts
+#              absorb six calls at two apiece. The slot is named at the call, not counted at runtime.
+#   agy     1  - its calls share one home directory under the packet and would collide in it.
+#   claude  1  - file auth holds one account at a time.
+#
+# TWO WAVES, which is the design's only ordering rule: the blinding question is asked after the
+# answers it must not influence are already on disk. Set BEAD_COST_REVIEW_SERIAL=1 to collapse every
+# lane into one, which is the shape to reproduce in when a parallel run misbehaves.
 
+lane() {  # reads "label|fn|prompt|extra" lines on stdin and works them in order
+    local label fn prompt extra
+    while IFS='|' read -r label fn prompt extra; do
+        [ -n "$label" ] || continue
+        call "$label" "$fn" "$prompt" "$extra"
+    done
+}
+
+run_lanes() {  # <lane-body>...  one argument per lane, each a newline-separated list of specs
+    local body pids=()
+    if [ -n "${BEAD_COST_REVIEW_SERIAL:-}" ]; then
+        for body in "$@"; do lane <<< "$body"; done
+        return 0
+    fi
+    for body in "$@"; do
+        lane <<< "$body" &
+        pids+=("$!")
+    done
+    wait "${pids[@]}"
+}
+
+# Every prompt is built before anything is launched. Two lanes writing the same prompt file at the
+# same moment is a race with nothing to gain from it.
+letters=()
+declare -A prompt_a=()
 for impl in "$packet_dir"/impl-*.md; do
     letter="$(basename "$impl" .md)"; letter="${letter#impl-}"
-    prompt="$out_dir/.prompt-a-$letter.txt"
-    build_prompt "$review/prompt-pass-a.md" "$impl" "$prompt"
-    call "passA-$letter-codex" ask_codex "$prompt"
-    call "passA-$letter-glm"   ask_glm   "$prompt"
+    letters+=("$letter")
+    prompt_a[$letter]="$out_dir/.prompt-a-$letter.txt"
+    build_prompt "$review/prompt-pass-a.md" "$impl" "${prompt_a[$letter]}"
 done
-
-# --- pass B: comparative, one packet, all four reviewers ----------------------------------------
-
 prompt_b="$out_dir/.prompt-b.txt"
 build_prompt "$review/prompt-pass-b.md" "$packet_dir/packet.md" "$prompt_b"
-call "passB-codex"  ask_codex  "$prompt_b"
-call "passB-glm"    ask_glm    "$prompt_b"
-call "passB-gemini" ask_gemini "$prompt_b" "$review/schema-pass-b.json"
-call "passB-opus"   ask_opus   "$prompt_b"
-
-# --- the blinding check, asked AFTER the answers are on disk so it cannot influence them ---------
-
 prompt_c="$out_dir/.prompt-blinding.txt"
 build_prompt "$review/prompt-blinding-check.md" "$packet_dir/packet.md" "$prompt_c"
-call "blind-codex"  ask_codex  "$prompt_c"
-call "blind-glm"    ask_glm    "$prompt_c"
-call "blind-gemini" ask_gemini "$prompt_c" "$review/schema-blinding.json"
-call "blind-opus"   ask_opus   "$prompt_c"
+
+# --- wave 1: pass A and pass B ---------------------------------------------------------------
+#
+# The comparative call heads codex's first lane deliberately. It is the half that carries the
+# ranking, and putting it first means the answer worth reading arrives while the five absolute
+# calls behind it are still running.
+
+codex_queue=("passB-codex|ask_codex|$prompt_b|")
+glm_queue=("passB-glm|ask_glm|$prompt_b|1")
+slot=1
+for letter in "${letters[@]}"; do
+    codex_queue+=("passA-$letter-codex|ask_codex|${prompt_a[$letter]}|")
+    slot=$(( slot % 3 + 1 ))
+    glm_queue+=("passA-$letter-glm|ask_glm|${prompt_a[$letter]}|$slot")
+done
+
+# Dealt round-robin into two lanes, so the first lane opens with pass B and the second with the
+# first implementation, and neither ever runs more than one codex call at a time.
+codex_lane_1=""; codex_lane_2=""
+for i in "${!codex_queue[@]}"; do
+    if [ $(( i % 2 )) -eq 0 ]; then
+        codex_lane_1+="${codex_queue[$i]}"$'\n'
+    else
+        codex_lane_2+="${codex_queue[$i]}"$'\n'
+    fi
+done
+
+glm_lanes=()
+for spec in "${glm_queue[@]}"; do glm_lanes+=("$spec"); done
+
+printf '%s  WAVE 1 - pass A and pass B, %s calls\n' "$(stamp)" "$(( ${#codex_queue[@]} + ${#glm_queue[@]} + 2 ))"
+run_lanes "$codex_lane_1" "$codex_lane_2" "${glm_lanes[@]}" \
+    "passB-gemini|ask_gemini|$prompt_b|$review/schema-pass-b.json" \
+    "passB-opus|ask_opus|$prompt_b|"
+
+# --- wave 2: the blinding check, one call per reviewer ------------------------------------------
+
+printf '%s  WAVE 2 - the blinding check, 4 calls\n' "$(stamp)"
+run_lanes "blind-codex|ask_codex|$prompt_c|" \
+    "blind-glm|ask_glm|$prompt_c|1" \
+    "blind-gemini|ask_gemini|$prompt_c|$review/schema-blinding.json" \
+    "blind-opus|ask_opus|$prompt_c|"
 
 printf '%s  REVIEW COMPLETE - answers in %s\n' "$(stamp)" "$out_dir"
