@@ -16,6 +16,11 @@
 # all rather than merely being impolite to read, which is the same fix `harden-worktree.sh` applies
 # to a run for the same reason.
 #
+# `rw_maps` DOES NOT GOVERN EVERY MOUNT, and the first version of this script assumed it did.
+# `ai-jail` binds some volumes regardless of the config - on this machine `/mnt/build`, where agent
+# scratchpads live - and those scratchpads hold full clones of the subject repository. Only `mask`
+# takes them away. See MASKED_VOLUMES below for the measurement.
+#
 # `ai-jail` is a filesystem control and NOT a network control: `allow_tcp_ports` applies only in
 # lockdown mode, and the reviewers must reach their own model endpoints or they cannot answer at
 # all. Network restraint therefore has to come from each CLI's own flags, and the caller is
@@ -31,6 +36,30 @@ shift || true
 packet_dir="$(cd "$packet_dir" && pwd)"
 [ -f "$packet_dir/packet.md" ] || { echo "isolate: no packet.md in $packet_dir" >&2; exit 1; }
 
+# Volumes `ai-jail` mounts READ-WRITE whatever `rw_maps` says, and that hold a copy of the subject
+# repository. `/mnt/build` is where this machine keeps agent scratchpads, and two of them contain
+# clones of llmux whose object store carries the commit this review uses as its hidden control.
+# Measured from inside a jail this script had just certified as isolated: a sibling scratchpad
+# listed, its clone's AGENTS.md read, and /mnt/build writable. `mask` replaces the path with an
+# empty tmpfs and is the only lever that closed it.
+#
+# A CONTENT GREP IS NOT A SUBSTITUTE. The clone's HEAD sits on the base commit and the reference
+# commit exists there only as a compressed object, so grepping the tree for the bead's symbols
+# finds nothing while `git show` still hands over the answer.
+MASKED_VOLUMES="/mnt/build"
+
+# The packet cannot live inside a volume that has to be masked - masking it would take the packet
+# with it. The agent scratchpad is under /mnt/build, so this is the ordinary case, not an exotic
+# one, and refusing is better than building a jail whose contents are empty.
+for volume in $MASKED_VOLUMES; do
+    case "$packet_dir/" in
+        "$volume"/*)
+            echo "isolate: the packet is inside $volume, which must be masked - build it elsewhere" >&2
+            echo "isolate: e.g. build_review_packet.py --out ~/tmp/bead-cost-review/review-packet" >&2
+            exit 1 ;;
+    esac
+done
+
 # The KEY names every lane. It lives beside the packet for decoding afterwards and must never be
 # inside the jail, so it is moved out of the mounted directory rather than trusted to be ignored.
 # It goes under ~/tmp, NOT beside the packet. The first attempt put it in the packet's parent
@@ -45,6 +74,10 @@ if [ -f "$key" ]; then
     echo "isolate: key stored in $key_store, outside anything the jail mounts"
 fi
 
+mask_toml=""
+for volume in $MASKED_VOLUMES; do mask_toml="$mask_toml\"$volume\", "; done
+mask_toml="${mask_toml%, }"
+
 cat > "$packet_dir/.ai-jail" <<EOF
 # Written by evals/bead_cost/review-isolate.sh. A reviewer sees this directory and nothing else.
 #
@@ -55,7 +88,8 @@ command = ["claude"]
 rw_maps = ["$packet_dir"]
 ro_maps = []
 hide_dotdirs = [".password-store"]
-mask = []
+# Not cosmetic: these are mounted read-write regardless of rw_maps and carry clones of the subject.
+mask = [$mask_toml]
 no_docker = true
 allow_tcp_ports = []
 EOF
@@ -76,6 +110,25 @@ if [ "$#" -eq 0 ]; then
     check "every other repository"  "$HOME/repositories"
     check "the run root with all the other implementations" "$HOME/tmp/bead-cost"
     check "the decoding key" "$key_store"
+
+    # A named list only ever closes the holes somebody thought of, and the /mnt/build leak was one
+    # nobody had. This check is derived from the packet's own path instead: whatever else the jail
+    # mounts, the directory holding the packet must show the packet and nothing beside it. It is the
+    # only check here that would have caught that leak without already knowing the volume's name.
+    siblings="$(jailed ls -A "$(dirname "$packet_dir")" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')"
+    if [ "$siblings" = "$(basename "$packet_dir")" ]; then
+        echo "  ok    the packet has no visible siblings"
+    else
+        echo "  FAIL  the packet's neighbours are reachable: $siblings"; fail=1
+    fi
+
+    for volume in $MASKED_VOLUMES; do
+        if [ -z "$(jailed ls -A "$volume" 2>/dev/null)" ]; then
+            echo "  ok    $volume holds nothing inside the jail"
+        else
+            echo "  FAIL  $volume still has contents inside the jail; the mask did not take"; fail=1
+        fi
+    done
 
     if jailed test -f "$packet_dir/packet.md" 2>/dev/null; then
         echo "  ok    the packet itself IS reachable"
