@@ -33,7 +33,19 @@ ARMS = {
     "gemini-3.7-flash": "llmux-agy",
     "sonnet": "llmux-claude",
     "deepseek-pro-high": "llmux-dshigh",
+    "deepseek-pro-max": "llmux-deepseek",
+    "deepseek-flash-high": "llmux-dsfhigh",
+    "gemini-3.1-pro-high": "llmux-gempro",
+    "gpt-5.6-terra": "llmux-terra",
 }
+
+# Runs an arm collected under a DIFFERENT environment than the rest of its arm. The codex lane was
+# piloted before each run got a tracker seeded into its checkout, and three of those runs declined
+# to implement anything because the subject forbids working while a coordination protection is
+# unavailable. Mixing the two conditions inside one arm is two arms wearing one name, so the earlier
+# regime is named here rather than left for a reader to infer from run numbers.
+EXCLUDED = {"llmux-terra-01", "llmux-terra-02", "llmux-terra-03",
+            "llmux-terra-07", "llmux-terra-08"}
 
 
 def usable_runs(root: pathlib.Path, prefix: str) -> list[str]:
@@ -47,6 +59,8 @@ def usable_runs(root: pathlib.Path, prefix: str) -> list[str]:
     found = []
     for directory in sorted(root.glob(f"{prefix}-*")):
         if not re.fullmatch(rf"{re.escape(prefix)}-\d+", directory.name):
+            continue
+        if directory.name in EXCLUDED or (directory / "KILLED").exists():
             continue
         verdict = directory / "verdict.json"
         if not verdict.exists():

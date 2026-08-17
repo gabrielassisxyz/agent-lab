@@ -34,10 +34,36 @@ import statistics
 import sys
 from itertools import combinations
 
-CONFLICT_FREE = {"codex", "glm"}
-# Which reviewer shares a family with which lane. Recorded here rather than inferred, because the
+# Which reviewer shares a family with which ARMS. Recorded here rather than inferred, because the
 # whole point is to test the assumption rather than to encode it silently.
-SAME_FAMILY = {"opus": "sonnet", "gemini": "gemini-3.7-flash"}
+#
+# CONFLICT IS A PROPERTY OF THE PAIR, not of the panel, and modelling it as a panel property is what
+# broke when the set of arms grew. The first version held a fixed `CONFLICT_FREE = {codex, glm}`,
+# and adding an OpenAI arm turned that pair into one reviewer - at which point the rule "a
+# conflict-free reviewer is missing invalidates the ranking" had nothing left to protect. Nothing
+# about the panel changed; what changed is that `codex` is conflicted on ONE entry out of nine and
+# is a perfectly good baseline for the other eight.
+#
+# The values are substrings matched against the key's source label, so an arm named
+# `deepseek-pro-max / llmux-deepseek-03` is matched by `deepseek`. Keep them specific enough not to
+# collide: `gemini` matches both Google arms deliberately.
+SAME_FAMILY = {
+    "opus": ("sonnet",),
+    "codex": ("gpt-5.6",),
+    "gemini": ("gemini-",),
+    "glm": (),
+}
+
+
+def conflicted(reviewer: str, source: str) -> bool:
+    """Does this reviewer share a lineage with the implementation behind this entry?"""
+    return any(marker in source for marker in SAME_FAMILY.get(reviewer, ()))
+
+
+def clean_reviewers(reviewers, mapping: dict, letter: str) -> list[str]:
+    """The reviewers that can serve as a baseline FOR THIS ENTRY, in a stable order."""
+    source = mapping.get(letter, "")
+    return sorted(r for r in reviewers if not conflicted(r, source))
 
 
 def unwrap_envelope(value: dict) -> dict:
@@ -232,19 +258,29 @@ def main() -> int:
     median_rho = statistics.median(correlations) if correlations else None
 
     print("\n=== self-preference: did a reviewer favour its own family? ===")
-    clean = [r for r in rankings if r in CONFLICT_FREE]
-    for reviewer, family in SAME_FAMILY.items():
-        if reviewer not in rankings:
-            continue
-        letter = next((l for l, src in mapping.items() if family in src), None)
-        if letter is None or not clean:
-            continue
-        mine = rankings[reviewer].index(letter) + 1
-        theirs = statistics.mean([rankings[r].index(letter) + 1 for r in clean if letter in rankings[r]])
-        gap = theirs - mine
-        verdict = "FAVOURED" if gap >= 1 else ("penalised" if gap <= -1 else "no effect")
-        print(f"  {reviewer:8s} placed its family's entry ({letter}) at {mine}, "
-              f"conflict-free reviewers at {theirs:.2f}  ->  {verdict}")
+    # Asked per ENTRY, against the reviewers that are clean for that entry. A panel-wide baseline
+    # would either shrink to one reviewer or silently include a reviewer conflicted on a different
+    # entry, and neither is a reference anything can be measured against.
+    asked = False
+    for letter in letters:
+        source = mapping.get(letter, "")
+        baseline = [r for r in clean_reviewers(rankings, mapping, letter) if letter in rankings[r]]
+        for reviewer in sorted(rankings):
+            if not conflicted(reviewer, source) or letter not in rankings[reviewer]:
+                continue
+            if len(baseline) < 2:
+                print(f"  {reviewer:8s} wrote nothing comparable for {letter}: fewer than two clean "
+                      f"reviewers left, so no baseline")
+                continue
+            asked = True
+            mine = rankings[reviewer].index(letter) + 1
+            theirs = statistics.mean([rankings[r].index(letter) + 1 for r in baseline])
+            gap = theirs - mine
+            verdict = "FAVOURED" if gap >= 1 else ("penalised" if gap <= -1 else "no effect")
+            print(f"  {reviewer:8s} placed its own family's entry {letter} ({source}) at {mine}, "
+                  f"the {len(baseline)} clean reviewers at {theirs:.2f}  ->  {verdict}")
+    if not asked:
+        print("  no reviewer shares a family with any entry in this packet")
 
     print("\n=== pass A findings ===")
     by_impl: dict[str, dict[str, list]] = {}
@@ -276,14 +312,20 @@ def main() -> int:
     failures = []
     attention = []
 
-    # A missing reviewer is not one kind of loss. The conflict-free pair IS the reference the
-    # conflicted two are measured against, and one ordering cannot tell a biased reviewer from a
-    # merely different one - so losing either of them takes the measurement with it. Losing a
-    # conflicted reviewer costs one question and leaves the rest standing.
-    missing_clean = sorted(CONFLICT_FREE - set(rankings))
-    if missing_clean:
-        failures.append(f"a conflict-free reviewer is missing from the ranking ({missing_clean}); "
-                        f"self-preference has no baseline left to measure against")
+    # A missing reviewer is not one kind of loss, and the loss is per ENTRY. What has to survive is
+    # that every entry keeps at least two reviewers sharing no lineage with it: one ordering cannot
+    # tell a biased reviewer from a merely different one, so an entry down to a single clean reader
+    # has nothing to measure its conflicted readers against. Stated this way the rule holds however
+    # the set of arms grows, which the fixed pair it replaced did not.
+    thin = {letter: clean_reviewers(rankings, mapping, letter)
+            for letter in letters
+            if len([r for r in clean_reviewers(rankings, mapping, letter) if letter in rankings[r]]) < 2}
+    if thin:
+        failures.append(
+            "an entry is down to fewer than two reviewers sharing no lineage with it "
+            + ", ".join(f"{letter} ({mapping.get(letter, '?')}): {clean or 'none'}"
+                        for letter, clean in sorted(thin.items()))
+            + " - self-preference there has no baseline left to measure against")
     if unusable_b:
         attention.append(f"MISSING from the ranking: {sorted(unusable_b)} - every number above is "
                          f"averaged without them")
@@ -305,12 +347,11 @@ def main() -> int:
     for path in sorted(args.answers.glob("blind-*.txt")):
         answer = load_json(path.read_text(errors="replace"), "own_family_entry") or {}
         reviewer = path.stem.split("-", 1)[1]
-        family = SAME_FAMILY.get(reviewer)
         guess, unreadable = read_blinding_pick(answer.get("own_family_entry"), mapping)
         if unreadable:
             attention.append(f"{reviewer} answered the blinding check with {unreadable!r}, which is "
                              f"neither a letter nor a refusal; read that answer by hand")
-        if family and guess and family in mapping[guess]:
+        if guess and conflicted(reviewer, mapping.get(guess, "")):
             failures.append(
                 f"{reviewer} picked out its own family's entry ({guess}) in the blinding check, "
                 f"so its ranking of that entry cannot be treated as blind")

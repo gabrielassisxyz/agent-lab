@@ -220,16 +220,46 @@ class Verdict(unittest.TestCase):
         self.assertIn("ranked LAST", out)
         self.assertNotIn("must not be published", out)
 
-    def test_a_missing_conflict_free_reviewer_invalidates_the_ranking(self):
+    def test_a_reviewer_is_measured_against_the_readers_clean_for_that_entry(self):
+        """Self-preference is asked per entry. opus wrote nothing here, but the sonnet entry is its
+        family's, so its placement of B is compared with the reviewers that share no lineage with B
+        - not with a panel-wide list that would include a reviewer conflicted somewhere else."""
+        answers, key = write_panel(self.tmp, {
+            "codex": ["E", "A", "C", "D", "B"],
+            "glm": ["E", "A", "C", "D", "B"],
+            "opus": ["E", "A", "C", "B", "D"],
+        })
+        code, out = run(answers, key)
+        self.assertEqual(0, code)
+        self.assertIn("placed its own family's entry B", out)
+        self.assertIn("FAVOURED", out)
+
+    def test_an_entry_down_to_one_clean_reviewer_invalidates_the_ranking(self):
+        """Conflict is a property of the PAIR, so what has to survive is per entry: two readers who
+        share no lineage with it. Here only opus and gemini answered, and B is the sonnet entry -
+        opus is its family, which leaves gemini alone as its baseline. One ordering cannot tell a
+        biased reviewer from a merely different one."""
+        answers, key = write_panel(self.tmp, {
+            "opus": ["E", "B", "A", "C", "D"],
+            "gemini": ["E", "C", "A", "B", "D"],
+        })
+        code, out = run(answers, key)
+        self.assertEqual(2, code)
+        self.assertIn("fewer than two reviewers sharing no lineage", out)
+        self.assertIn("must not be published", out)
+
+    def test_a_conflicted_reviewer_is_a_baseline_for_every_entry_but_its_own(self):
+        """The rule this replaced was panel-wide, and it made adding an arm from a reviewer's family
+        cost the whole ranking. Here glm is absent and codex is conflicted with nothing in this
+        packet, so every entry still has two clean readers and the result stands."""
         answers, key = write_panel(self.tmp, {
             "codex": ["E", "A", "B", "C", "D"],
             "opus": ["E", "B", "A", "C", "D"],
             "gemini": ["E", "C", "A", "B", "D"],
         })
         code, out = run(answers, key)
-        self.assertEqual(2, code)
-        self.assertIn("conflict-free reviewer is missing", out)
-        self.assertIn("must not be published", out)
+        self.assertEqual(0, code)
+        self.assertIn("no invalidating condition triggered", out)
 
     def test_a_missing_conflicted_reviewer_is_flagged_and_still_publishes(self):
         answers, key = write_panel(self.tmp, {

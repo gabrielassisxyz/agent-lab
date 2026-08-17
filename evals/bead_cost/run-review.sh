@@ -3,7 +3,7 @@
 #
 #   ./run-review.sh <packet-dir> [<out-dir>]
 #   ./run-review.sh --probe <packet-dir> [<out-dir>]    one trivial call per reviewer, then stop
-#   ./run-review.sh --pass-b <packet-dir> <out-dir>     the comparative pass alone, four calls
+#   ./run-review.sh --pass-b <packet-dir> <out-dir>     the comparative pass alone, one call each
 #
 # `--pass-b` EXISTS TO MEASURE THE INSTRUMENT, not to save calls. Run against the SAME packet into a
 # fresh output directory, it repeats the comparative pass with nothing changed - same entries, same
@@ -19,7 +19,7 @@
 # and for what it sees at `~/repositories/llmux`, so a single cheap call answers whether the
 # reviewer works and whether it can reach the solution.
 #
-# WHY A SCRIPT. Eighteen calls across four different CLIs, each with its own trap - one waits on
+# WHY A SCRIPT. Dozens of calls across several CLIs, each with its own trap - one waits on
 # stdin forever without a redirect, one swallows the prompt if a flag comes after `--print`, one
 # needs its account named or it bills whichever token a file happens to hold. Three of the pilot's
 # five environment defects were steps run by hand in the wrong order or against the wrong path, and
@@ -79,7 +79,13 @@ stamp() { date '+%H:%M:%S'; }
 # opened by the unjailed caller, so neither has to live in the one directory the reviewer can see.
 jailed() { "$here/review-isolate.sh" "$packet_dir" -- "$@"; }
 
-# --- the four reviewers, each with the trap that would otherwise cost an hour -------------------
+# --- the reviewers, each with the trap that would otherwise cost an hour -----------------------
+#
+# `ask_gemini` is kept although no lane calls it any more. The Google family is unusable as a
+# reviewer only while its models are ARMS - both `gemini-3.1-pro-high` and `gemini-3.7-flash` are in
+# this packet - and the next packet may hold neither. Deleting the function would take its four
+# hard-won flags with it: --print last, effort baked into the id, the permission pair, and the schema
+# copied inside the jail.
 
 ask_codex() {  # <prompt-file> <out-file>
     # `< /dev/null` is not optional: `codex exec` waits on stdin forever without it, and the symptom
@@ -206,7 +212,6 @@ if [ "$probe_only" -eq 1 ]; then
     cp "$review/prompt-probe.md" "$prompt_p"
     call "probe-codex"  ask_codex  "$prompt_p"
     call "probe-glm"    ask_glm    "$prompt_p"
-    call "probe-gemini" ask_gemini "$prompt_p" "$review/schema-probe.json"
     call "probe-opus"   ask_opus   "$prompt_p"
     printf '%s  PROBE COMPLETE - read every answer before launching the real passes\n' "$(stamp)"
     exit 0
@@ -267,36 +272,81 @@ build_prompt "$review/prompt-pass-b.md" "$packet_dir/packet.md" "$prompt_b"
 prompt_c="$out_dir/.prompt-blinding.txt"
 build_prompt "$review/prompt-blinding-check.md" "$packet_dir/packet.md" "$prompt_c"
 
-# The four comparative calls, named once and used by both paths below, so a repeat run cannot drift
-# from the run it is being compared against. The GLM account is pinned to the same slot for the same
+# The comparative calls, named once and used by both paths below, so a repeat run cannot drift from
+# the run it is being compared against. The GLM account is pinned to the same slot for the same
 # reason: an account is a variable, and this measurement has to have only one.
+#
+# THE GEMINI REVIEWER IS GONE, and it is the packet that removed it rather than a preference. That
+# reviewer runs `gemini-3.1-pro-high`, which is now the id of an ARM: the same model reading its own
+# code is not a second opinion, and no aggregation rule repairs that afterwards. The Google family
+# has no other id to fall back to, because the other one - `gemini-3.7-flash` - is also an arm. A
+# panel of three that shares no lineage with itself is worth more than a fourth ordering that does.
 pass_b_lanes=(
     "passB-codex|ask_codex|$prompt_b|"
     "passB-glm|ask_glm|$prompt_b|1"
-    "passB-gemini|ask_gemini|$prompt_b|$review/schema-pass-b.json"
     "passB-opus|ask_opus|$prompt_b|"
 )
 
 if [ "$pass_b_only" -eq 1 ]; then
-    printf '%s  PASS B ALONE - 4 calls, identical to the ones in a full run\n' "$(stamp)"
+    printf '%s  PASS B ALONE - %s calls, identical to the ones in a full run\n' \
+        "$(stamp)" "${#pass_b_lanes[@]}"
     run_lanes "${pass_b_lanes[@]}"
     printf '%s  DONE - compare this ordering with the other runs of the same packet\n' "$(stamp)"
     exit 0
 fi
 
+# --- who reviews what, in the absolute pass ----------------------------------------------------
+#
+# Pass A is one call per (entry, reviewer), so unlike the ranking it CAN route around a conflict -
+# and it has to. The default pair is glm + codex; on an entry written by a reviewer's own family
+# that reviewer is replaced rather than dropped, so every entry keeps two readers.
+#
+# The runner reads the answer key to do this, which is the one place that is allowed and worth
+# saying out loud: the key never reaches a prompt, a packet or a jail. `review-isolate.sh` moves it
+# out of the packet before any reviewer runs, and what the runner does with it is decide which
+# account to bill - not what to show.
+key_file="${BEAD_COST_REVIEW_KEY:-$HOME/tmp/bead-cost-review-keys/$(basename "$packet_dir").json}"
+declare -A conflicted_with=()
+if [ -f "$key_file" ]; then
+    while IFS='=' read -r letter reviewer; do
+        [ -n "$letter" ] && conflicted_with[$letter]="$reviewer"
+    done < <(python3 - "$key_file" <<'PY'
+import json, pathlib, sys
+
+# The same lineages the aggregator carries, and they must not drift apart: a pair chosen here that
+# the aggregator then treats as conflicted would spend the call and discard the answer.
+FAMILY = {"opus": ("sonnet",), "codex": ("gpt-5.6",), "gemini": ("gemini-",)}
+mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())["mapping"]
+for letter, source in mapping.items():
+    for reviewer, markers in FAMILY.items():
+        if any(marker in source for marker in markers):
+            print(f"{letter}={reviewer}")
+PY
+    )
+else
+    printf '%s  NOTE   no key at %s - pass A runs with the default pair on every entry\n' \
+        "$(stamp)" "$key_file"
+fi
+
 # --- wave 1: pass A and pass B ---------------------------------------------------------------
 #
 # The comparative call heads codex's first lane deliberately. It is the half that carries the
-# ranking, and putting it first means the answer worth reading arrives while the five absolute
-# calls behind it are still running.
+# ranking, and putting it first means the answer worth reading arrives while the absolute calls
+# behind it are still running.
 
 codex_queue=("${pass_b_lanes[0]}")
 glm_queue=("${pass_b_lanes[1]}")
+opus_queue=()
 slot=1
 for letter in "${letters[@]}"; do
-    codex_queue+=("passA-$letter-codex|ask_codex|${prompt_a[$letter]}|")
     slot=$(( slot % 3 + 1 ))
     glm_queue+=("passA-$letter-glm|ask_glm|${prompt_a[$letter]}|$slot")
+    if [ "${conflicted_with[$letter]:-}" = "codex" ]; then
+        printf '%s  ROUTE  %s is codex family - its pass A goes to opus instead\n' "$(stamp)" "$letter"
+        opus_queue+=("passA-$letter-opus|ask_opus|${prompt_a[$letter]}|")
+    else
+        codex_queue+=("passA-$letter-codex|ask_codex|${prompt_a[$letter]}|")
+    fi
 done
 
 # Dealt round-robin into two lanes, so the first lane opens with pass B and the second with the
@@ -313,16 +363,20 @@ done
 glm_lanes=()
 for spec in "${glm_queue[@]}"; do glm_lanes+=("$spec"); done
 
-printf '%s  WAVE 1 - pass A and pass B, %s calls\n' "$(stamp)" "$(( ${#codex_queue[@]} + ${#glm_queue[@]} + 2 ))"
-run_lanes "$codex_lane_1" "$codex_lane_2" "${glm_lanes[@]}" \
-    "${pass_b_lanes[2]}" "${pass_b_lanes[3]}"
+# One lane, because file auth holds one account at a time - the pass B call and whatever pass A work
+# was routed here run one after the other.
+opus_lane="${pass_b_lanes[2]}"$'\n'
+for spec in "${opus_queue[@]}"; do opus_lane+="$spec"$'\n'; done
+
+printf '%s  WAVE 1 - pass A and pass B, %s calls\n' "$(stamp)" \
+    "$(( ${#codex_queue[@]} + ${#glm_queue[@]} + ${#opus_queue[@]} + 1 ))"
+run_lanes "$codex_lane_1" "$codex_lane_2" "${glm_lanes[@]}" "$opus_lane"
 
 # --- wave 2: the blinding check, one call per reviewer ------------------------------------------
 
-printf '%s  WAVE 2 - the blinding check, 4 calls\n' "$(stamp)"
+printf '%s  WAVE 2 - the blinding check, 3 calls\n' "$(stamp)"
 run_lanes "blind-codex|ask_codex|$prompt_c|" \
     "blind-glm|ask_glm|$prompt_c|1" \
-    "blind-gemini|ask_gemini|$prompt_c|$review/schema-blinding.json" \
     "blind-opus|ask_opus|$prompt_c|"
 
 printf '%s  REVIEW COMPLETE - answers in %s\n' "$(stamp)" "$out_dir"

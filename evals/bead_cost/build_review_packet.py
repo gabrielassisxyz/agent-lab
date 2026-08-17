@@ -48,6 +48,10 @@ IMPLEMENTATIONS = [
     ("gemini-3.7-flash", "llmux-agy-02"),
     ("sonnet", "llmux-claude-04"),
     ("deepseek-pro-high", "llmux-dshigh-03"),
+    ("deepseek-pro-max", "llmux-deepseek-04"),
+    ("deepseek-flash-high", "llmux-dsfhigh-05"),
+    ("gemini-3.1-pro-high", "llmux-gempro-08"),
+    ("gpt-5.6-terra", "llmux-terra-04"),
 ]
 
 PRODUCTION_ONLY = ["--", "*.go", ":(exclude)*_test.go"]
