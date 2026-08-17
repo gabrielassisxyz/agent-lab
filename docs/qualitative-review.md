@@ -89,7 +89,7 @@ The probe asks each reviewer for its model identifier and for what it sees at th
 BEAD_COST_CLAUDE_ACCOUNT=<account> ./run-review.sh ~/tmp/bead-cost-review/review-packet
 ```
 
-Eighteen calls for a five-entry packet: ten pass A (five entries × two conflict-free reviewers), four pass B, four blinding.
+Twenty-four calls for a nine-entry packet: eighteen pass A (nine entries × two reviewers with no lineage in the entry), three pass B, three blinding. The arithmetic follows the panel, and the panel follows the packet - see [the panel is not fixed](#the-panel-is-not-fixed-it-is-whatever-the-packet-leaves-clean).
 
 **Two waves.** The blinding check is asked after the answers it must not influence are already on disk. Asking it in the same call would tell the reviewer that authorship matters, and then the ranking measures the question.
 
@@ -100,9 +100,9 @@ Eighteen calls for a five-entry packet: ten pass A (five entries × two conflict
 | `codex` | 2 | what its quota takes; it holds most of the calls and sets the wall clock |
 | GLM via `pi` | one per call | the limit is a request rate **per account**, and three accounts absorb six calls at two apiece |
 | `agy` | 1 | its calls share one home directory under the packet and would collide in it |
-| `claude` | 1 | file auth holds one account at a time |
+| `claude` | 1 | file auth holds one account at a time, and it also takes whatever pass A work is routed away from a conflicted reviewer |
 
-Two switches for when this shape is the suspect: `BEAD_COST_REVIEW_SERIAL=1` collapses every lane into one, and `BEAD_COST_REVIEW_DRYRUN=1` prints what each lane would ask - with its account slot and schema - and spends nothing. Use the dry run before any launch; eighteen paid calls are worth reading before they are worth running.
+Two switches for when this shape is the suspect: `BEAD_COST_REVIEW_SERIAL=1` collapses every lane into one, and `BEAD_COST_REVIEW_DRYRUN=1` prints what each lane would ask - with its account slot and schema - and spends nothing. Use the dry run before any launch; two dozen paid calls are worth reading before they are worth running. It also prints the routing - `ROUTE E is codex family - its pass A goes to opus instead` - which is the cheapest way to see that the panel came out the way you meant it to.
 
 The runner is resumable. A label with a usable answer is skipped; an answer that turns out to be empty is moved aside as `<label>.txt.empty` so a rerun asks again and the evidence survives.
 
@@ -132,7 +132,7 @@ Every rule was fixed before the first reviewer was called, and that ordering is 
 
 - reviewer orderings do not correlate with each other (median Spearman below +0.20);
 - a reviewer identifies its own family's entry in the blinding check;
-- **a conflict-free reviewer is missing from the ranking.** Those two are the baseline the conflicted reviewers are measured against, and one ordering cannot tell a biased reviewer from a merely different one.
+- **an entry is down to fewer than two reviewers sharing no lineage with it.** Those readers are the baseline its conflicted readers are measured against, and one ordering cannot tell a biased reviewer from a merely different one. The rule is per ENTRY rather than per panel, which is what makes it survive the set of arms growing: a reviewer conflicted on one entry out of nine is still a baseline for the other eight.
 
 **Attention lines**, which are true and do not discard anything:
 
@@ -147,6 +147,19 @@ Every one of these produced a well-formed report while dropping or inventing an 
 - **`codex exec` echoes the entire prompt before answering**, the prompt carries the packet, and the packet is source code. Reading from the first brace to the end of the file starts inside the echoed example and runs through thousands of lines that are not JSON. A brace counter is not the fix either: the echoed code carries its own quotes and braces, and a counter walking forwards loses synchronisation inside it. The answer is found by `raw_decode` at each opening brace **from the end backwards**, stopping at the first object carrying the key the caller asked for.
 - **`agy` returns an envelope, not an answer**, and that envelope carries a copy of the schema it was handed - whose `properties` object has the answer's keys for its own keys. Searching that file backwards reaches the schema before the answer. So a recognised envelope is unwrapped first and is then the only thing in the file worth reading.
 - **A refusal is not the letter it starts with.** The blinding check offers `none` and `cannot_tell` beside the letters, and taking the first character turns `cannot_tell` into `C`. Three of four reviewers refused in the first real run, and the check reported the blinding broken and voided the result.
+
+## The panel is not fixed: it is whatever the packet leaves clean
+
+The reviewers are chosen per packet, and two rules decide who is in it.
+
+**A reviewer whose model is an ARM is out of the packet, not merely conflicted.** The Google reader ran `gemini-3.1-pro-high`; when that id became an arm, the same model would have been reading its own code, and no aggregation rule repairs that afterwards. The family's other id was also an arm, so there was nothing to swap to and the panel went from four readers to three. Check this before building the packet: it is the one conflict that costs a whole reviewer.
+
+**Every other conflict is a property of the PAIR, and it is asked per entry.** A reviewer sharing a family with one entry out of nine is still a baseline for the other eight. So:
+
+- **pass B cannot route around it.** One call ranks the whole packet, so a conflicted reviewer still ranks its own family's entry. What changes is how that placement is USED - it is measured against the readers clean for that entry, never averaged in as if it were one.
+- **pass A can, and does.** It is one call per (entry, reviewer), so on an entry written by a reviewer's own family that reviewer is replaced rather than dropped, and the entry keeps two readers. The runner reads the answer key to decide that. This is the one place the key is allowed: it picks which account to bill, never what to show, and it never enters a prompt, a packet or a jail.
+
+Measured on the eight-arm packet, with both conflicted readers present: `opus` placed the sonnet entry at 3 where the clean readers put it at 4.50, and `codex` placed the OpenAI entry at 6 where they put it at 8.50. Both favoured their own family by around a rank and a half. That is why the baseline is per entry rather than a fixed pair.
 
 ## Step 6: the measurement floor, before believing any movement
 
@@ -189,26 +202,28 @@ Each replicate also gets its own lettering seed, so the same arm lands on a diff
 2. **Kendall's W**, from 0 to 1: how strongly the blocks agree on one ordering. This answers *how strong*, which significance never answers.
 3. **Friedman**, which answers only whether this much agreement could come from treatments that are interchangeable. Not which beats which, and not whether the difference matters. Two pairwise comparisons at this size would not survive multiple-comparison correction, so none is claimed.
 
-Both statistics are reported twice: over replicates, which are independent blocks, and over every reviewer-replicate pair, which are not - the same four reviewers appear in every replicate, so that p is optimistic and is labelled where it is printed rather than in a footnote.
+Both statistics are reported twice: over replicates, which are independent blocks, and over every reviewer-replicate pair, which are not - the same reviewers appear in every replicate, so that p is optimistic and is labelled where it is printed rather than in a footnote.
 
 ## Adding a model to the comparison
 
-The comparative pass **does not get more expensive as arms are added**. Every entry rides in one packet, so pass B is four calls per packet whatever the packet holds.
+The comparative pass **does not get more expensive as arms are added**. Every entry rides in one packet, so pass B is one call per reviewer per packet whatever the packet holds.
 
 ```
-pass B, replicated  = 4 × replicates          independent of the number of arms
-pass A              = 2 × NEW entries         the existing findings still stand
-blinding            = 4 × packet versions
-measurement floor   = 4 × (repeats − 1)       optional, and worth it on a bigger packet
+pass B, replicated  = reviewers × replicates      independent of the number of arms
+pass A              = 2 × entries                 one call per (entry, reviewer)
+blinding            = reviewers × packet versions
+measurement floor   = reviewers × (repeats − 1)   not optional on a packet that grew
 ```
 
-For two new arms that is **28 review calls** - and the 20 already spent are *replaced*, not extended, because a ranking is valid only for the set that was ranked. The findings from pass A are the part that carries over.
+For the eight-arm packet that was **45 review calls** with a panel of three - and the 20 already spent on the four-arm packet are *replaced*, not extended, because a ranking is valid only for the set that was ranked.
+
+Pass A findings carry over only where the entry is byte-identical AND the prompt has not changed. Both were true for five entries in the eight-arm packet and the second was not, so they were re-asked; what that bought is in [the results](../results/bead-cost/qualitative-review-eight-arms-2026-08-17.md), and it is not reassuring about finding counts.
 
 The real cost is elsewhere, in three places:
 
 - **The implementation runs.** Five per arm, and one run of a strong model costs more than the whole review pass it will later be judged in.
-- **Attention per entry.** A five-entry packet is around 32 KB; seven entries is around 44 KB. The call count is flat but the judgement per entry is not, and at some point that should be measured rather than assumed - which is what a floor measurement on the bigger packet would tell you.
-- **The conflict-free pair.** The panel depends on two reviewers sharing no lineage with any entry, and the validity rules protect exactly that pair. Adding an arm from a reviewer's family costs one of them. Check the families before choosing the models, not after.
+- **Attention per entry, and this one is now measured rather than feared.** A five-entry packet is around 32 KB and repeating its comparative pass moved **no position at all**. A nine-entry packet is 59.6 KB, and repeating it moves one position nearly everywhere and two in one place, with mean rank drifting by a full point. The call count is flat; the resolution is not. **Take the floor on the packet you are actually publishing** - a gap that would have been real on five entries is inside the noise on nine.
+- **The panel.** Adding an arm from a reviewer's family does not cost you that reviewer, but it does cost you its opinion **on that entry**. Check the families before choosing the models, not after - and if an arm turns out to be the same model id as a reviewer, that reviewer is out of the packet entirely rather than merely conflicted. See below.
 
 Each new arm also needs five runs that pass, or it cannot enter the draw.
 

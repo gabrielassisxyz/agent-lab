@@ -10,7 +10,7 @@ A **lane is the pair**: one harness driving one model on one account. It is the 
 
 | word | what it names | where |
 | --- | --- | --- |
-| `harness` | the agent CLI that drives the run: `pi`, `agy`, `claude` | `run.sh`'s second argument, `record.json`, `tabulate.py`'s column |
+| `harness` | the agent CLI that drives the run: `pi`, `agy`, `claude`, `codex` | `run.sh`'s second argument, `record.json`, `tabulate.py`'s column |
 | `model_route` | the id the proxy is asked for, account suffix included: `litellm/kimi-k2.7-k2` | `run.sh`'s third argument, `record.json` as `model`, `runs.json` |
 | lane | the pair of the two. Not a field: it is the key of a `runs.json` entry and the roster name in `sweep.sh` | prose, and the results tables |
 
@@ -70,9 +70,10 @@ Because `docs/DESIGN.md` §6–§10 is the record of this exact class of experim
 | --- | --- |
 | `find-work.sh` | find the tree a run actually left its work in, rather than the one it was launched in |
 | `score.sh` | apply the Rust canonical verification to one run's worktree and emit its verdict |
-| `score-go.sh` | the same for a Go subject, graded per test function rather than binary |
+| `score-go.sh` | the same for a Go subject, graded per test function rather than binary, and graded TWICE - see the two regimes below |
 | `go_verdict.py` · `test_go_verdict.py` | reduce `go test -json` to a verdict; the tests pin the build-failure semantics |
-| `classify.py` · `test_classify.py` | say what a run's outcome was in the vocabulary the arithmetic needs: `admitted`, `wrong`, `no-diff`, and the unreachable cases |
+| `classify.py` · `test_classify.py` | say what a run's outcome was in the vocabulary the arithmetic needs: `admitted`, `wrong`, `no-diff`, `blocked`, `killed`, and the unreachable cases |
+| `seed_tracker.py` · `test_seed_tracker.py` | give the run's checkout the tracker its subject expects, holding one bead built from the prompt's own whitelist |
 | `rescore.sh` | re-grade runs that already happened, from the trees they left, and write the verdict back |
 | `fixtures/benchmark_arch_42q_verify.rs` | the first subject's canonical verification, vendored |
 | `fixtures/llmux_5vg_reservation_test.go` | the current subject's, 16 test functions. Already present in the base tree, so the contract reaches the agent through the failing test |
@@ -107,6 +108,36 @@ The machinery above answers *did this run solve the bead*. These answer the ques
 - **`score-go.sh` carries `5vg`'s fixture, path and package** in `BEAD_COST_GO_FIXTURE`, `BEAD_COST_GO_FIXTURE_PATH` and `BEAD_COST_GO_PACKAGE`. A different bead needs all three set, or it silently grades the wrong package.
 - **The prompt is built once per bead and cached** at `_prompt-<bead>.txt` under the run root, deliberately, so lanes are never compared on prompts that differ by a byte. **If the prompt builder changes, the stale file wins and nothing warns you** - delete it to regenerate.
 - **The Go warm-up requires `go build ./...` to succeed but only tries to compile the tests.** That is not laxity: on this bead one test package failing to compile IS the task, and requiring it rejected the first pilot outright.
+
+## The verdict answers two questions, and it used to report one
+
+`score-go.sh` grades every run **twice**, and the reason is a hole that swallowed eight runs across three arms before anyone looked.
+
+| regime | what it asks |
+| --- | --- |
+| `contract` | the canonical file over the tree as the run left it. Are the sixteen behaviours implemented? |
+| `contract_with_legacy_api` | the same, plus every test file in the graded package restored from the base commit. Are they implemented **and** did the pre-existing public API survive? |
+
+The restore is what stops a run passing by weakening the very test that states the contract, and it is not in dispute. Its cost is that the canonical file calls helpers defined in the files it restores, and those helpers call methods a refactor may have removed - so a run that reorganised the package's API and migrated its own tests to match fails to COMPILE before one canonical assertion runs. It scored zero with `build_failed`, which reads as a bead left unsolved.
+
+`passed` at the top level carries the first regime, because completing the bead is what the cost arithmetic divides by. The second becomes `pre_existing_tests_pass`, which `tabulate.py` prints as `legacy_ok`. One arm's published headline moved from 0 of 5 to 5 of 7 on that distinction alone; the account is in [`results/bead-cost/eight-arms-2026-08-17.md`](../../results/bead-cost/eight-arms-2026-08-17.md).
+
+## What the machine cost is not what the model cost
+
+Four outcomes leave the arithmetic entirely, through the `instrument` tuple in `tabulate.py`. Three were already there - `broken`, `aborted`, `unreachable` - and two joined after a campaign where each of them was quietly charged to a model:
+
+- **`blocked`** - the run declined to edit anything and named a protection the SUBJECT requires as unavailable. On `llmux` that is Agent Mail, which is not running on this machine, and its own `AGENTS.md` says an agent must not implement while a coordination protection is down. Three runs of one arm obeyed that rule; the other seven arms implemented straight through it. Detected from the model's own final message, never from tool output - the repository's documentation names every protection the pattern looks for.
+- **`killed`** - the operator stopped the run. `rescore.sh` re-grades trees on disk and cannot know a lane was parked mid-run, so it graded the fragments and four of them sat in their arms' denominators as models that produced nothing.
+
+Both are visible rather than hidden: the summary line prints `N runs, M usable`, so the gap between them is the count of what the machine cost.
+
+## The tracker the subject expects
+
+`.beads` in the subject is a symlink into `local/`, which is git-ignored, so a checkout cut from the base repository has a tracker pointing at nothing - and the subject's `AGENTS.md` forbids implementing while a coordination protection is unavailable. Measured on three runs of one harness: two obeyed and stopped before editing, one implemented and passed. Same prompt, same environment, a coin flip.
+
+`seed_tracker.py` gives each run's checkout a tracker holding ONE bead, built from `bead_prompt.KEPT` - the same whitelist that renders the task statement - so what the tracker can tell an agent is a subset of what its prompt already said, by construction. The bead arrives `open`, because this one is closed and a tracker that says so answers the only question the run was asked. A deny-list refuses the completion record outright: on this bead the comment log names the identifiers the canonical verification demands.
+
+`verify.sh` proves it from inside the jail, and the fix's neutrality was measured rather than assumed - five runs of an arm that never used a tracker, with the seeding in place, against its five without: turns 46 to 48, output 13 034 to 14 421, both inside the noise.
 
 ## Constant is fine, varying is not
 
