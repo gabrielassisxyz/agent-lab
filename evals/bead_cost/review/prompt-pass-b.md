@@ -29,5 +29,7 @@ Return ONLY a JSON object matching this shape, with no prose before or after it:
 }
 ```
 
+EVERYTHING YOU NEED IS IN THIS MESSAGE. The code below is the whole of the material - there is no repository to browse, no file to open, and no tool that would tell you anything more. Cite lines by the paths shown in the diff headers.
+
 THE IMPLEMENTATIONS:
 
