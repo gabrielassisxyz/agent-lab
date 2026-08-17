@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "required": ["findings", "overall", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "claim", "lines", "cost_later", "concrete_followup"],
+        "additionalProperties": false,
+        "properties": {
+          "severity": {"type": "string", "enum": ["high", "medium", "low", "taste"]},
+          "claim": {"type": "string"},
+          "lines": {"type": "string"},
+          "cost_later": {"type": "string"},
+          "concrete_followup": {"type": "string"}
+        }
+      }
+    },
+    "overall": {"type": "string"},
+    "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+  }
+}
