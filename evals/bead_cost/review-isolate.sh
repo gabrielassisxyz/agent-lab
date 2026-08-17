@@ -99,4 +99,11 @@ if [ "$#" -eq 0 ]; then
     exit 1
 fi
 
-exec ai-jail --exec --no-save-config -- env -C "$packet_dir" "$@"
+# The `cd` is the whole difference between a jail and a decoration, and it is not obvious enough to
+# leave implicit: `ai-jail` reads `.ai-jail` from the CURRENT WORKING DIRECTORY, not from any path it
+# is handed. Written as `ai-jail … -- env -C "$packet_dir" …` - which looks equivalent - it picks up
+# whatever config the caller's directory has, mounts ~/repositories with it, and the subject
+# repository is readable from inside a run that this very script has just certified as isolated.
+# Measured both ways: without the cd, `ls ~/repositories/llmux` prints the tree; with it, "No such
+# file or directory".
+exec sh -c 'cd "$1" && shift && exec ai-jail --exec --no-save-config -- "$@"' _ "$packet_dir" "$@"

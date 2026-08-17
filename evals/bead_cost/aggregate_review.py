@@ -163,13 +163,20 @@ def main() -> int:
         failures.append(f"the reference implementation ranked LAST ({ref_position} of {len(aggregate)})")
     if median_rho is not None and median_rho < 0.2:
         failures.append(f"reviewer orderings do not correlate (median rho {median_rho:+.2f})")
+    # The question asked is family recognition, not self-recognition, and the distinction is not
+    # pedantic: NO reviewer wrote any of these. Opus did not write the sonnet entry, Gemini 3.1 Pro
+    # did not write the flash one. An earlier version of this prompt asked "which did you write",
+    # whose truthful answer is always "none" - so it would have reported the blinding intact without
+    # ever having tested it.
     for path in sorted(args.answers.glob("blind-*.txt")):
         answer = load_json(path.read_text(errors="replace")) or {}
-        guess = str(answer.get("believe_wrote", "")).strip().upper()[:1]
+        guess = str(answer.get("own_family_entry", "")).strip().upper()[:1]
         reviewer = path.stem.split("-", 1)[1]
         family = SAME_FAMILY.get(reviewer)
         if family and guess and guess in mapping and family in mapping[guess]:
-            failures.append(f"{reviewer} identified its own implementation ({guess}) in the blinding check")
+            failures.append(
+                f"{reviewer} picked out its own family's entry ({guess}) in the blinding check, "
+                f"so its ranking of that entry cannot be treated as blind")
 
     if failures:
         print("  INVALID:")
