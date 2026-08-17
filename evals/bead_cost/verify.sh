@@ -310,6 +310,39 @@ else
                 needle="${BEAD_COST_CLAUDE_ACCOUNT:-primary}"
                 subject="the claude account '$needle'"
                 ;;
+            # codex publishes no catalogue a gate can list without spending a request, but it ships
+            # one on disk: the model cache the CLI itself reads. The ids come out of the copy inside
+            # the sandbox, and only if the credential came across with it - a lane with a catalogue
+            # and no token starts normally and dies on the first call, which is the failure this
+            # gate exists to move earlier. Both halves are therefore one answer: no auth, no ids, and
+            # the message below already says "catalog or credentials".
+            codex)
+                # The single quotes are the point: `$HOME` must be expanded by the shell INSIDE the
+                # jail, where it is the run's own home, and not by this one, where it is the
+                # machine's. Expanded out here the gate would read the operator's real catalogue and
+                # certify a sandbox that never received one.
+                # shellcheck disable=SC2016
+                lane_models=$(jail sh -c '
+                    [ -s "$HOME/.codex/auth.json" ] || exit 0
+                    python3 -c "
+import json, pathlib, sys
+cache = pathlib.Path.home() / \".codex/models_cache.json\"
+if not cache.exists():
+    sys.exit(0)
+ids = set()
+def walk(node):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in (\"id\", \"slug\", \"model\") and isinstance(value, str):
+                ids.add(value)
+            walk(value)
+    elif isinstance(node, list):
+        for item in node:
+            walk(item)
+walk(json.loads(cache.read_text()))
+print(\" \".join(sorted(ids)))
+"' 2>/dev/null || true)
+                ;;
             *)   lane_models=$(jail pi --list-models 2>/dev/null || true) ;;
         esac
         # Matched in the shell, NOT through `… | grep -q`. Under `pipefail` that pipeline is a
@@ -344,6 +377,47 @@ else
             pass "$subject is known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail"
         else
             bad "$subject is NOT known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail - catalog or credentials did not come across"
+        fi
+    fi
+
+    # The seeded tracker, asked the way an agent would ask it. `seed_tracker.py` checks its own
+    # output, and that is not the same check: this one runs INSIDE the jail, against the tracker the
+    # run will actually reach, after the sandbox has been built around it. A tracker holding a second
+    # issue, or a comment log, would hand the run the identifiers the canonical verification demands
+    # - and nothing in the run's answer would reveal that it had been read.
+    if [ -L "$checkout/.beads" ] && [ -f "$checkout/local/_beads/beads.db" ]; then
+        seeded=$(jail br list --json --db "$checkout/local/_beads/beads.db" 2>/dev/null || true)
+        if [ -z "$seeded" ]; then
+            bad "the seeded tracker cannot be read from inside the jail - the run will find .beads broken"
+        else
+            # The catalogue is read INSIDE the jail and parsed OUTSIDE it, and the parser arrives by
+            # heredoc rather than `-c`: a quoted python program inside a quoted shell string has one
+            # set of quotes too many, and the first version of this died on its own SyntaxError.
+            # Loudly, at least - the gate refused the sandbox rather than certifying it.
+            verdict=$(python3 - "$seeded" "${BEAD_COST_BEAD:-}" <<'PY'
+import json, sys
+
+raw, wanted = sys.argv[1], sys.argv[2]
+try:
+    data = json.loads(raw)
+except ValueError:
+    print("unreadable"); raise SystemExit
+issues = data if isinstance(data, list) else (data.get("issues") or data.get("data") or [])
+if len(issues) != 1:
+    print("holds %d issues, expected exactly 1" % len(issues)); raise SystemExit
+issue = issues[0]
+if wanted and issue.get("id") != wanted:
+    print("holds %s, not %s" % (issue.get("id"), wanted)); raise SystemExit
+if issue.get("comments") or issue.get("close_reason") or issue.get("closed_at"):
+    print("carries a completion record"); raise SystemExit
+print("ok")
+PY
+)
+            if [ "$verdict" = "ok" ]; then
+                pass "the seeded tracker holds exactly this bead, open, with no completion record"
+            else
+                bad "the seeded tracker is not what it must be: $verdict"
+            fi
         fi
     fi
 fi

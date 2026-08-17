@@ -83,6 +83,13 @@ def row(run_dir: pathlib.Path) -> dict:
         # A tree that does not build is the shape of a near-miss on this subject, not an unscored
         # run, so the flag belongs beside the score rather than only inside the verdict file.
         "build_failed": verdict.get("build_failed"),
+        # `section_a` above now answers "did it solve the bead" - the canonical file over the tree as
+        # the run left it. This is the other half, and it has to be printed rather than kept in the
+        # verdict: eight runs of this campaign solved the bead and broke the package's older tests
+        # by removing a public method those tests call, and while the two answers were one number
+        # every one of them read as having produced nothing. `None` is a verdict written before the
+        # scorer reported two regimes, not a pass.
+        "legacy_ok": verdict.get("pre_existing_tests_pass"),
         "committed": worktree.get("committed"),
         "files": worktree.get("diff_files"),
         "wall_s": int((ended - started).total_seconds()) if started and ended else None,
@@ -115,7 +122,8 @@ def main() -> int:
         print()
         return 0
 
-    columns = ["started", "run", "harness", "model", "outcome", "section_a", "committed", "wall_s", "turns", "input", "output"]
+    columns = ["started", "run", "harness", "model", "outcome", "section_a", "legacy_ok",
+               "committed", "wall_s", "turns", "input", "output"]
     widths = {c: max(len(c), *(len(str(r.get(c))) for r in rows)) if rows else len(c) for c in columns}
     print("  ".join(c.ljust(widths[c]) for c in columns))
     for item in rows:
@@ -136,14 +144,26 @@ def main() -> int:
         # `usable` means the run says something about the model. A poisoned window, a lane that
         # errored out mid-edit, a lane that was never reached and a run that never started all say
         # something about the machine instead, and each one of them in the denominator reads as a
-        # model that failed. A model's OWN failure - a rejected fix, a refusal to implement - stays
-        # in, because someone has to pay for it twice.
-        instrument = ("poisoned-window", "broken", "aborted", "unreachable")
+        # model that failed. A model's OWN failure - a rejected fix - stays in, because someone has
+        # to pay for it twice.
+        #
+        # `blocked` joins them, and it is the newest and least obvious member. Those runs declined
+        # to edit because the subject's AGENTS.md forbids implementing while a coordination
+        # protection is unavailable - and that protection is not running on this machine at all, so
+        # a real session in that repository would meet the same wall. It is an environment gap, and
+        # an environment gap belongs in neither the attempt count nor the token means: charging one
+        # metric and not the other would be the same run counted two ways.
+        #
+        # It is not hidden by being excluded. The line below prints runs AND usable, so the gap
+        # between them is the count of everything the machine cost, visible without entering a mean.
+        instrument = ("poisoned-window", "broken", "aborted", "unreachable", "blocked", "killed")
         usable = [r for r in model_rows if r["outcome"] not in instrument]
         admitted = [r for r in usable if r["outcome"] == "admitted"]
+        blocked = [r for r in model_rows if r["outcome"] == "blocked"]
         median_wall = sorted(r["wall_s"] for r in usable if r["wall_s"]) or [None]
         print(
             f"{model}: {len(model_rows)} runs, {len(usable)} usable, {len(admitted)} admitted"
+            + (f", {len(blocked)} blocked by an unavailable protection" if blocked else "")
             + (f", median {median_wall[len(median_wall) // 2]}s" if median_wall[0] else "")
         )
     return 0
