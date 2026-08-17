@@ -379,6 +379,47 @@ print(\" \".join(sorted(ids)))
             bad "$subject is NOT known to the ${BEAD_COST_HARNESS:-pi} harness inside the jail - catalog or credentials did not come across"
         fi
     fi
+
+    # The seeded tracker, asked the way an agent would ask it. `seed_tracker.py` checks its own
+    # output, and that is not the same check: this one runs INSIDE the jail, against the tracker the
+    # run will actually reach, after the sandbox has been built around it. A tracker holding a second
+    # issue, or a comment log, would hand the run the identifiers the canonical verification demands
+    # - and nothing in the run's answer would reveal that it had been read.
+    if [ -L "$checkout/.beads" ] && [ -f "$checkout/local/_beads/beads.db" ]; then
+        seeded=$(jail br list --json --db "$checkout/local/_beads/beads.db" 2>/dev/null || true)
+        if [ -z "$seeded" ]; then
+            bad "the seeded tracker cannot be read from inside the jail - the run will find .beads broken"
+        else
+            # The catalogue is read INSIDE the jail and parsed OUTSIDE it, and the parser arrives by
+            # heredoc rather than `-c`: a quoted python program inside a quoted shell string has one
+            # set of quotes too many, and the first version of this died on its own SyntaxError.
+            # Loudly, at least - the gate refused the sandbox rather than certifying it.
+            verdict=$(python3 - "$seeded" "${BEAD_COST_BEAD:-}" <<'PY'
+import json, sys
+
+raw, wanted = sys.argv[1], sys.argv[2]
+try:
+    data = json.loads(raw)
+except ValueError:
+    print("unreadable"); raise SystemExit
+issues = data if isinstance(data, list) else (data.get("issues") or data.get("data") or [])
+if len(issues) != 1:
+    print("holds %d issues, expected exactly 1" % len(issues)); raise SystemExit
+issue = issues[0]
+if wanted and issue.get("id") != wanted:
+    print("holds %s, not %s" % (issue.get("id"), wanted)); raise SystemExit
+if issue.get("comments") or issue.get("close_reason") or issue.get("closed_at"):
+    print("carries a completion record"); raise SystemExit
+print("ok")
+PY
+)
+            if [ "$verdict" = "ok" ]; then
+                pass "the seeded tracker holds exactly this bead, open, with no completion record"
+            else
+                bad "the seeded tracker is not what it must be: $verdict"
+            fi
+        fi
+    fi
 fi
 
 echo

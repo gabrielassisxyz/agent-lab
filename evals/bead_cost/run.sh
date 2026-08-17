@@ -88,6 +88,23 @@ fi
 # which is right for a bead nobody has done yet.
 [ -d "$checkout" ] || "$here/checkout.sh" "$run_id" "${BEAD_COST_BASE_COMMIT:-}" >/dev/null
 [ -d "$run_home" ] || "$here/sandbox.sh" "$run_id" >/dev/null
+# The tracker the subject expects to find, holding this bead and nothing else. Without it `.beads`
+# dangles - it points into `local/`, which is git-ignored and so cannot be in a checkout - and the
+# subject's own AGENTS.md forbids implementing while a coordination protection is unavailable. Two
+# of three runs of one harness read that rule and stopped before editing anything, while every arm
+# that scored did so by ignoring an explicit instruction in the repository it was working in.
+# `seed_tracker.py` builds the record from the prompt's own whitelist, so it can say nothing the
+# prompt has not already said. Skipped for a subject that keeps no tracker at that path.
+BEAD_COST_SEED_TRACKER="${BEAD_COST_SEED_TRACKER:-1}"
+if [ "$BEAD_COST_SEED_TRACKER" = "1" ] && [ -L "$checkout/.beads" ]; then
+    "$here/seed_tracker.py" "$checkout" --subject "$subject" --bead "$bead" \
+        > "$run_dir/seed_tracker.log" 2>&1 || {
+        echo "run: the tracker could not be seeded - see $run_dir/seed_tracker.log" >&2
+        cat "$run_dir/seed_tracker.log" >&2
+        exit 1
+    }
+    cat "$run_dir/seed_tracker.log"
+fi
 git -C "$checkout" rev-parse HEAD > "$run_dir/base_commit"
 # The marker file keeps its historical name. Dozens of run directories on disk carry it, and
 # re-collecting a verdict from artefacts already kept is how a metric gets repaired without paying
@@ -153,6 +170,7 @@ flock 9
 
 say "verifying the sandbox (nothing is measured until this is green)"
 if ! BEAD_COST_CHECKOUT="$checkout" BEAD_COST_MODEL="$model" BEAD_COST_HARNESS="$harness" \
+        BEAD_COST_BEAD="$bead" \
         "$here/verify.sh" "$run_home" > "$run_dir/verify.log" 2>&1; then
     flock -u 9
     echo "run: sandbox NOT verified - see $run_dir/verify.log" >&2
