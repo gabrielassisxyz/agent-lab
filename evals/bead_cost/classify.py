@@ -13,6 +13,7 @@ task it was never given.
     wrong        the run left a diff and the verification rejected it
     no-diff      the run finished and left the tree at its base commit
     blocked      the run declined to edit, naming a protection the subject requires as unavailable
+    killed       the operator stopped the run; whatever it left is a fragment, not a result
     aborted      the lane errored out mid-edit and the tree was never scored
     unreachable  the lane could not be reached: rate limit, quota, credentials, unknown model
     truncated    the model's last turn hit its output ceiling and the session ended
@@ -193,6 +194,15 @@ def harness_text(run_dir: pathlib.Path, record: dict | None) -> str:
 def classify(run_dir: pathlib.Path) -> str:
     verdict = read_json(run_dir / "verdict.json")
     record = read_json(run_dir / "record.json")
+
+    # Before anything is read from the tree. A run the operator stopped left a fragment, and
+    # `rescore.sh` will happily grade that fragment - it re-grades from trees on disk and has no way
+    # to know a lane was parked mid-run. Graded, the fragment scores zero and reads as a model that
+    # produced nothing, which is how three runs killed by hand ended up in an arm's denominator as
+    # failed attempts. The marker is written by whoever does the killing; its absence is the normal
+    # case and costs nothing to check.
+    if (run_dir / "KILLED").exists():
+        return "killed"
 
     # What the run PRODUCED is decided before why it might not have, and the order is a correction.
     # Reachability used to be checked first, against the raw streams, which reads any mention of a

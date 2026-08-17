@@ -19,9 +19,11 @@ from classify import classify  # noqa: E402
 
 
 def _run(tmp: pathlib.Path, *, verdict=None, record=None, stderr: str = "",
-         stdout: str = "") -> pathlib.Path:
+         stdout: str = "", killed: bool = False) -> pathlib.Path:
     run_dir = tmp / "run"
     run_dir.mkdir()
+    if killed:
+        (run_dir / "KILLED").write_text("stopped by the operator\n")
     if verdict is not None:
         (run_dir / "verdict.json").write_text(json.dumps(verdict))
     if record is not None:
@@ -78,6 +80,16 @@ class ClassifyTest(unittest.TestCase):
 
     def test_a_run_with_no_artefacts_at_all_is_broken(self):
         self.assertEqual(self.outcome(), "broken")
+
+    def test_a_run_the_operator_stopped_is_not_a_failed_attempt(self):
+        """`rescore.sh` grades trees on disk and cannot know a lane was parked mid-run, so the
+        fragment scores zero and reads as a model that produced nothing. Three runs killed by hand
+        sat in one arm's denominator that way, and a fourth in another's."""
+        self.assertEqual(self.outcome(verdict=UNSCORED, record=CLEAN, killed=True), "killed")
+
+    def test_being_killed_outranks_whatever_the_fragment_scored(self):
+        """Even a fragment that happens to grade as a rejected diff is still a fragment."""
+        self.assertEqual(self.outcome(verdict=PARTIAL, record=DIRTY, killed=True), "killed")
 
     def test_the_subject_repositorys_own_words_are_not_the_lane_failing(self):
         """Measured on the first codex run of this subject, which was classified `unreachable`.

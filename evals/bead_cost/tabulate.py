@@ -156,7 +156,7 @@ def main() -> int:
         #
         # It is not hidden by being excluded. The line below prints runs AND usable, so the gap
         # between them is the count of everything the machine cost, visible without entering a mean.
-        instrument = ("poisoned-window", "broken", "aborted", "unreachable", "blocked")
+        instrument = ("poisoned-window", "broken", "aborted", "unreachable", "blocked", "killed")
         usable = [r for r in model_rows if r["outcome"] not in instrument]
         admitted = [r for r in usable if r["outcome"] == "admitted"]
         blocked = [r for r in model_rows if r["outcome"] == "blocked"]
