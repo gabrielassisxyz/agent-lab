@@ -78,7 +78,14 @@ mask_toml=""
 for volume in $MASKED_VOLUMES; do mask_toml="$mask_toml\"$volume\", "; done
 mask_toml="${mask_toml%, }"
 
-cat > "$packet_dir/.ai-jail" <<EOF
+# Written to a temporary file and renamed into place, because this script now runs once per reviewer
+# call and several of those overlap. A plain redirect truncates before it writes, so an `ai-jail`
+# starting up in another call can read an empty config and fall back to its own defaults - which
+# mount ~/repositories read-write, the exact hole this file exists to close, and nothing in the
+# answer that reviewer writes would show that it happened. A rename is atomic within a filesystem:
+# a reader sees the whole old file or the whole new one, never half of either.
+jail_tmp="$packet_dir/.ai-jail.$$"
+cat > "$jail_tmp" <<EOF
 # Written by evals/bead_cost/review-isolate.sh. A reviewer sees this directory and nothing else.
 #
 # The default rw_maps is ~/repositories, which contains the subject repository and therefore the
@@ -93,6 +100,7 @@ mask = [$mask_toml]
 no_docker = true
 allow_tcp_ports = []
 EOF
+mv -f "$jail_tmp" "$packet_dir/.ai-jail"
 
 jailed() { (cd "$packet_dir" && ai-jail --exec --no-save-config -- "$@"); }
 
