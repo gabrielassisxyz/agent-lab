@@ -2,6 +2,14 @@
 # Drive the qualitative review: every reviewer, both passes, one command.
 #
 #   ./run-review.sh <packet-dir> [<out-dir>]
+#   ./run-review.sh --probe <packet-dir> [<out-dir>]   one trivial call per reviewer, then stop
+#
+# THE PROBE RUNS THROUGH THE SAME FUNCTIONS AS THE REAL PASSES, and that is the only reason it is
+# worth anything. What fails on the first launch is never the prompt: it is a flag this CLI rejects,
+# an account with no quota left, a credential the jail does not mount. A probe written as its own
+# command line proves a command line nobody will run. This one asks each reviewer for its model id
+# and for what it sees at `~/repositories/llmux`, so a single cheap call answers whether the
+# reviewer works and whether it can reach the solution.
 #
 # WHY A SCRIPT. Eighteen calls across four different CLIs, each with its own trap - one waits on
 # stdin forever without a redirect, one swallows the prompt if a flag comes after `--print`, one
@@ -20,7 +28,9 @@
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
-packet_dir="${1:?usage: run-review.sh <packet-dir> [<out-dir>]}"
+probe_only=0
+[ "${1:-}" = "--probe" ] && { probe_only=1; shift; }
+packet_dir="${1:?usage: run-review.sh [--probe] <packet-dir> [<out-dir>]}"
 packet_dir="$(cd "$packet_dir" && pwd)"
 # The answers live OUTSIDE the packet directory, and that is independence rather than tidiness.
 # `agy` keeps its tools, and its calls run after the ones that answer earlier, so a default of
@@ -88,7 +98,18 @@ ask_gemini() {  # <prompt-file> <out-file> <schema-file>
     local schema
     schema="$packet_dir/.schema-$(basename "$3")"
     cp "$3" "$schema"
+    # `--dangerously-skip-permissions --mode plan` is the pair, and neither half works alone. In
+    # print mode agy cannot prompt for a permission, so the first tool the model reaches for is
+    # auto-denied and the turn ends having written nothing: status SUCCESS, response empty, the
+    # answer gone. Measured twice on this prompt. Pre-authorising instead is a dead end - the
+    # permission classes are per tool and which one gets used is the model's choice - and telling it
+    # in the prompt that no tool would help did not stop it reaching for one.
+    #
+    # Auto-approving is only a small claim because of the two things around it: `--mode plan` cannot
+    # write, and the jail leaves nothing to read but the packet. This is the case the jail was built
+    # for, rather than an exception to it.
     jailed env HOME="$clean" agy --model=gemini-3.1-pro-high --disable-slash-commands --sandbox \
+        --dangerously-skip-permissions --mode plan \
         --output-format=json --json-schema "$schema" --print-timeout 15m \
         --print "$(cat "$1")" > "$2" 2>&1
 }
@@ -101,21 +122,68 @@ ask_opus() {  # <prompt-file> <out-file>
         -p "$(cat "$1")" < /dev/null > "$2" 2>&1
 }
 
+# A file that exists is not an answer. `agy` reports `"status":"SUCCESS"` with an empty `response`
+# when a tool it wanted was auto-denied - a silent failure carrying a status field that says the
+# opposite - and the envelope it writes around that emptiness is large enough that a size check
+# calls it answered. Measured: a probe that asked for a directory listing came back SUCCESS, 574
+# output tokens, and nothing to read. Left to the size check, a resumed run would skip that label
+# for good and the aggregator would report a four-reviewer panel that had three.
+#
+# Which half of the envelope holds the answer is not fixed - agy has been seen putting the whole
+# thing in `response` and putting an acknowledgement in `structured_output`, and the reverse - so
+# emptiness has to mean BOTH are empty. Checking `response` alone would throw away a good answer.
+answered() {  # <out-file>
+    [ -s "$1" ] || return 1
+    python3 - "$1" <<'PY'
+import json, sys
+text = open(sys.argv[1], errors="replace").read()
+start = text.find("{")
+if start < 0:
+    sys.exit(0 if text.strip() else 1)     # not an envelope at all; any prose is an answer
+try:
+    env = json.loads(text[start:])
+except ValueError:
+    sys.exit(0)                            # prose around a broken object is repaired downstream
+if not isinstance(env, dict) or "status" not in env:
+    sys.exit(0)
+filled = [v for v in (env.get("response"), env.get("structured_output")) if v]
+sys.exit(0 if filled else 1)
+PY
+}
+
 call() {  # <label> <reviewer-fn> <prompt-file> [<schema>]
     local label="$1" fn="$2" prompt="$3" schema="${4:-}"
     local out="$out_dir/$label.txt"
-    if [ -s "$out" ]; then
+    if answered "$out"; then
         printf '%s  skip   %s (already answered)\n' "$(stamp)" "$label"
         return 0
     fi
     printf '%s  ask    %s\n' "$(stamp)" "$label"
     if [ -n "$schema" ]; then "$fn" "$prompt" "$out" "$schema"; else "$fn" "$prompt" "$out"; fi
-    printf '%s  got    %s (%s bytes)\n' "$(stamp)" "$label" "$(wc -c < "$out")"
+    if answered "$out"; then
+        printf '%s  got    %s (%s bytes)\n' "$(stamp)" "$label" "$(wc -c < "$out")"
+    else
+        # Kept, not deleted: the empty envelope is the evidence of how it failed. Moved aside so a
+        # rerun asks again instead of inheriting the emptiness.
+        mv -f "$out" "$out.empty"
+        printf '%s  EMPTY  %s - no answer in it; kept as %s.empty\n' "$(stamp)" "$label" "$label"
+    fi
 }
 
 build_prompt() {  # <template> <body-file> <out>
     cat "$1" "$2" > "$3"
 }
+
+if [ "$probe_only" -eq 1 ]; then
+    prompt_p="$out_dir/.prompt-probe.txt"
+    cp "$review/prompt-probe.md" "$prompt_p"
+    call "probe-codex"  ask_codex  "$prompt_p"
+    call "probe-glm"    ask_glm    "$prompt_p"
+    call "probe-gemini" ask_gemini "$prompt_p" "$review/schema-probe.json"
+    call "probe-opus"   ask_opus   "$prompt_p"
+    printf '%s  PROBE COMPLETE - read every answer before launching the real passes\n' "$(stamp)"
+    exit 0
+fi
 
 # --- pass A: absolute, one implementation per call, by the two conflict-free reviewers ----------
 
