@@ -12,6 +12,7 @@ task it was never given.
     admitted     the canonical verification passed on every criterion
     wrong        the run left a diff and the verification rejected it
     no-diff      the run finished and left the tree at its base commit
+    blocked      the run declined to edit, naming a protection the subject requires as unavailable
     aborted      the lane errored out mid-edit and the tree was never scored
     unreachable  the lane could not be reached: rate limit, quota, credentials, unknown model
     truncated    the model's last turn hit its output ceiling and the session ended
@@ -72,6 +73,71 @@ def last_stop_reason(record: dict | None) -> str | None:
     except OSError:
         return None
     return stop
+
+
+# A run is `blocked` when the model itself says it stopped because something the SUBJECT requires
+# was not there. Both halves are required and both are read out of the model's own final message -
+# never out of tool output, where the repository's documentation would match every pattern below.
+#
+# The vocabulary is wider than it looks it should be because the models write in the operator's
+# language: three refusals on this subject opened with "Blocked by repository safeguards", one with
+# "Bloqueado antes de editar", and one with "Não posso iniciar a implementação com segurança". Only
+# the last of those carries no word meaning "blocked" at all, which is why the discriminator is the
+# PROTECTION being named as missing rather than any particular way of saying no.
+BLOCKED_PROTECTION = re.compile(
+    r"agent[ _-]?mail|reservation guard|guard de reserva|\bbeads\b|NOT_INITIALIZED|\bbv\b",
+    re.IGNORECASE,
+)
+BLOCKED_UNAVAILABLE = re.compile(
+    r"unavailable|not available|not exposed|not installed|missing|cannot|blocked"
+    r"|indispon|não est\w* dispon|não dispon|não est\w* instalad|não posso|bloquead",
+    re.IGNORECASE,
+)
+
+
+def final_message(run_dir: pathlib.Path, record: dict | None) -> str | None:
+    """The last thing the MODEL said, per harness - or None when it cannot be isolated.
+
+    None matters as much as the text. A run whose final message cannot be read is left as whatever
+    it already was rather than guessed at: the alternative is scanning the whole of stdout, which is
+    how the repository's own documentation came to be read as a lane failing.
+    """
+    harness = (record or {}).get("harness")
+    stdout = run_dir / "stdout.txt"
+    if not stdout.exists():
+        return None
+    text = stdout.read_text(errors="replace")
+
+    if harness == "codex":
+        last = None
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("{"):
+                continue
+            try:
+                event = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            item = event.get("item") if isinstance(event.get("item"), dict) else {}
+            if item.get("type") == "agent_message" and item.get("text"):
+                last = item["text"]
+        return last
+
+    # The envelope harnesses put the answer in one object at the end.
+    start = text.find("{")
+    if start < 0:
+        return None
+    try:
+        envelope = json.loads(text[start:])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    for key in ("result", "response", "final_message", "output_text"):
+        value = envelope.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 def harness_text(run_dir: pathlib.Path, record: dict | None) -> str:
@@ -159,6 +225,15 @@ def classify(run_dir: pathlib.Path) -> str:
             return "truncated"
         if (record.get("usage") or {}).get("status") == "ERROR":
             return "unreachable"
+        # Checked last among the no-work cases, and only against the model's own words. A run that
+        # declined the task is not a run that attempted it and failed - the subject's AGENTS.md
+        # forbids implementing while a coordination protection is down, that protection is not
+        # running on this machine, and the arm that reads the rule is the only one it costs. Left as
+        # `no-diff` it reads as a model that produced nothing, which is the opposite of what the
+        # transcript says happened.
+        message = final_message(run_dir, record)
+        if message and BLOCKED_PROTECTION.search(message) and BLOCKED_UNAVAILABLE.search(message):
+            return "blocked"
         return "no-diff"
 
     return "broken"

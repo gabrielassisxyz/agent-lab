@@ -136,14 +136,26 @@ def main() -> int:
         # `usable` means the run says something about the model. A poisoned window, a lane that
         # errored out mid-edit, a lane that was never reached and a run that never started all say
         # something about the machine instead, and each one of them in the denominator reads as a
-        # model that failed. A model's OWN failure - a rejected fix, a refusal to implement - stays
-        # in, because someone has to pay for it twice.
-        instrument = ("poisoned-window", "broken", "aborted", "unreachable")
+        # model that failed. A model's OWN failure - a rejected fix - stays in, because someone has
+        # to pay for it twice.
+        #
+        # `blocked` joins them, and it is the newest and least obvious member. Those runs declined
+        # to edit because the subject's AGENTS.md forbids implementing while a coordination
+        # protection is unavailable - and that protection is not running on this machine at all, so
+        # a real session in that repository would meet the same wall. It is an environment gap, and
+        # an environment gap belongs in neither the attempt count nor the token means: charging one
+        # metric and not the other would be the same run counted two ways.
+        #
+        # It is not hidden by being excluded. The line below prints runs AND usable, so the gap
+        # between them is the count of everything the machine cost, visible without entering a mean.
+        instrument = ("poisoned-window", "broken", "aborted", "unreachable", "blocked")
         usable = [r for r in model_rows if r["outcome"] not in instrument]
         admitted = [r for r in usable if r["outcome"] == "admitted"]
+        blocked = [r for r in model_rows if r["outcome"] == "blocked"]
         median_wall = sorted(r["wall_s"] for r in usable if r["wall_s"]) or [None]
         print(
             f"{model}: {len(model_rows)} runs, {len(usable)} usable, {len(admitted)} admitted"
+            + (f", {len(blocked)} blocked by an unavailable protection" if blocked else "")
             + (f", median {median_wall[len(median_wall) // 2]}s" if median_wall[0] else "")
         )
     return 0

@@ -108,6 +108,69 @@ class ClassifyTest(unittest.TestCase):
         record = dict(CLEAN, harness="codex")
         self.assertEqual(self.outcome(record=record, stdout=stream), "unreachable")
 
+    def codex_stream(self, message: str) -> str:
+        return "\n".join(json.dumps(event) for event in [
+            {"type": "thread.started", "thread_id": "01a0106b"},
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "br ready --json",
+                "aggregated_output": '{"error":{"code":"NOT_INITIALIZED"}}'}},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": message}},
+            {"type": "turn.completed", "usage": {"input_tokens": 41829, "output_tokens": 2556}},
+        ])
+
+    def test_declining_for_a_missing_protection_is_blocked_not_no_diff(self):
+        """Both are trees left at the base commit, and they mean opposite things: one model could
+        not do the task, the other refused it because the subject's own AGENTS.md forbids
+        implementing while a coordination protection is unavailable."""
+        message = ("Blocked by repository safeguards: the Beads tracker is not initialized "
+                   "(`br` returns NOT_INITIALIZED) and MCP Agent Mail tools are not exposed.")
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=self.codex_stream(message)), "blocked")
+
+    def test_a_refusal_that_never_says_blocked_is_still_blocked(self):
+        """Measured: of five refusals on this subject, one opened with "Blocked", one with
+        "Bloqueado" and one with "Não posso iniciar a implementação com segurança". Keying on a word
+        meaning "blocked" would have missed the third, so the discriminator is the PROTECTION being
+        named as missing."""
+        message = ("Não posso iniciar a implementação com segurança: o protocolo obrigatório exige "
+                   "Agent Mail e o guard de reservas ativos, mas as ferramentas MCP não estão "
+                   "disponíveis nesta sessão.")
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=self.codex_stream(message)), "blocked")
+
+    def test_a_model_that_simply_produced_nothing_is_not_blocked(self):
+        message = "I could not work out how to satisfy the failing test, so I stopped."
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=self.codex_stream(message)), "no-diff")
+
+    def test_something_else_being_unavailable_is_not_a_blocked_run(self):
+        """`blocked` names one thing: a protection THE SUBJECT REQUIRES was not there. A model that
+        stopped because anything else was unavailable is a different outcome, and collapsing the two
+        would quietly move runs out of the arithmetic on the strength of the word "unavailable"."""
+        message = "The upstream API was unavailable and I could not proceed. No files changed."
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=self.codex_stream(message)), "no-diff")
+
+    def test_the_subjects_own_docs_cannot_make_a_run_blocked(self):
+        """The tool output names every protection this pattern looks for - reading it instead of the
+        model's own words is the same defect that made a healthy lane read as rate-limited."""
+        stream = "\n".join(json.dumps(event) for event in [
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "sed -n '1,240p' AGENTS.md",
+                "aggregated_output": "Agent Mail is unavailable in this session? Then stop. "
+                                     "`beads` is missing means br returns NOT_INITIALIZED."}},
+            {"type": "item.completed", "item": {"type": "agent_message",
+                                                "text": "Implemented and committed."}},
+        ])
+        record = dict(CLEAN, harness="codex")
+        self.assertEqual(self.outcome(record=record, stdout=stream), "no-diff")
+
+    def test_a_run_that_produced_work_is_never_blocked(self):
+        message = "Blocked by nothing; Agent Mail was unavailable so I proceeded without it."
+        record = dict(DIRTY, harness="codex")
+        self.assertEqual(self.outcome(verdict=PARTIAL, record=record,
+                                      stdout=self.codex_stream(message)), "wrong")
+
     def test_a_lane_that_is_not_codex_still_reads_its_whole_stdout(self):
         """The filter is scoped to the streaming harness. The envelope lanes print nothing but their
         own envelope, so narrowing the scan for them would only lose evidence."""
