@@ -51,6 +51,94 @@ class Envelope(unittest.TestCase):
         self.assertEqual(RANKING["ranking"], load_json(raw)["ranking"])
 
 
+# What `codex exec` writes: the whole prompt echoed back - example JSON and all - then the answer,
+# then a token tally. Three traps live in here at once. The example is NOT valid JSON, because the
+# shape is written with alternatives; the echoed packet is Go source, with braces and quotes of its
+# own in quantity; and the LAST parseable object in the file is `reasons[0]`, nested inside the
+# answer rather than being it.
+CODEX_TRANSCRIPT = """OpenAI Codex v0.147.0
+user
+Return ONLY a JSON object matching this shape:
+
+```json
+{
+  "ranking": ["B", "D", "A", "C", "E"],
+  "confidence": "high" | "medium" | "low"
+}
+```
+
+THE IMPLEMENTATIONS:
++func (c *Coordinator) Reserve(a string) (*Lease, error) {
++	if c.pending[a] >= 60 {
++		return nil, errors.New("rate ceiling reached for \\"account\\"")
++	}
++	return &Lease{owner: a}, nil
++}
+codex
+{
+  "ranking": ["C", "A", "E", "D", "B"],
+  "reasons": [
+    {"impl": "C", "position": 1, "why": "keeps the lease where it is created"}
+  ],
+  "confidence": "high"
+}
+tokens used
+31,819
+"""
+
+# What `agy` writes: one object, and it carries back a copy of the schema it was handed. That copy
+# has a `properties` object whose KEYS are the answer's keys, and it sits AFTER the response in the
+# file - so a backwards search reaches the schema first and comes back holding {"type": "array"}.
+AGY_ENVELOPE = json.dumps({
+    "conversation_id": "abc",
+    "status": "SUCCESS",
+    "response": json.dumps({"ranking": ["D", "B", "E", "A", "C"], "confidence": "high"}),
+    "json_schema": {"type": "object", "required": ["ranking"],
+                    "properties": {"ranking": {"type": "array"},
+                                   "confidence": {"type": "string"}}},
+    "usage": {"total_tokens": 18299},
+})
+
+
+# The same transcript with the one difference that makes the search direction matter: the echoed
+# example is VALID JSON. Today's prompts write the shape with alternatives, so the example happens
+# not to parse and reading forwards gives the same answer as reading backwards - checked against all
+# fourteen real transcripts, zero divergence. That is an accident of how the shape is written, not a
+# defence. Tidy the example into something valid, which is an ordinary thing for someone to do, and
+# a forward search returns the EXAMPLE's ranking as though a reviewer had produced it: not an error
+# anybody would see, but a fabricated result.
+CODEX_TRANSCRIPT_VALID_EXAMPLE = CODEX_TRANSCRIPT.replace(
+    '"confidence": "high" | "medium" | "low"', '"confidence": "high"')
+
+
+class Transcript(unittest.TestCase):
+    def test_a_valid_example_in_the_echoed_prompt_is_still_not_the_answer(self):
+        answer = load_json(CODEX_TRANSCRIPT_VALID_EXAMPLE, "ranking")
+        self.assertEqual(["C", "A", "E", "D", "B"], answer["ranking"])
+        self.assertNotEqual(["B", "D", "A", "C", "E"], answer["ranking"])
+
+    def test_the_answer_is_read_out_of_a_codex_transcript(self):
+        answer = load_json(CODEX_TRANSCRIPT, "ranking")
+        self.assertEqual(["C", "A", "E", "D", "B"], answer["ranking"])
+
+    def test_the_nested_reason_is_not_mistaken_for_the_answer(self):
+        # `reasons[0]` is the last object in the file and parses perfectly on its own.
+        answer = load_json(CODEX_TRANSCRIPT, "ranking")
+        self.assertNotIn("impl", answer)
+
+    def test_the_schema_echoed_back_by_agy_is_not_mistaken_for_the_answer(self):
+        answer = load_json("mise WARN noise\n" + AGY_ENVELOPE, "ranking")
+        self.assertEqual(["D", "B", "E", "A", "C"], answer["ranking"])
+
+    def test_an_agy_envelope_with_an_empty_response_yields_nothing(self):
+        empty = json.dumps({"status": "SUCCESS", "response": "",
+                            "json_schema": {"properties": {"ranking": {"type": "array"}}}})
+        self.assertIsNone(load_json(empty, "ranking"))
+
+    def test_a_transcript_with_no_object_at_all_is_none(self):
+        self.assertIsNone(load_json("no json here, only regret", "ranking"))
+
+
 def write_panel(tmp: pathlib.Path, rankings: dict[str, list[str]], envelope: set[str] = frozenset()):
     answers = tmp / "answers"
     answers.mkdir(parents=True, exist_ok=True)
