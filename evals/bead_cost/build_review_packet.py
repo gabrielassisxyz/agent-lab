@@ -98,12 +98,27 @@ def main() -> int:
     ap.add_argument("--gold", default="3d6a5a2")
     ap.add_argument("--seed", type=int, required=True,
                     help="fixes the lettering; record it, and keep the key away from reviewers")
+    ap.add_argument("--runs", default="",
+                    help="arm=run,arm=run,... in place of the default median set. Replicating the "
+                         "comparison needs a different run of each arm per packet, and the median "
+                         "rule exists to pick ONE representative - which is the choice replication "
+                         "removes rather than repeats.")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     args = ap.parse_args()
 
+    implementations = IMPLEMENTATIONS
+    if args.runs:
+        implementations = []
+        for pair in args.runs.split(","):
+            if "=" not in pair:
+                print(f"build: --runs wants arm=run pairs, got {pair!r}", file=sys.stderr)
+                return 1
+            arm, run = pair.split("=", 1)
+            implementations.append((arm.strip(), run.strip()))
+
     here = pathlib.Path(__file__).resolve().parent
     entries = []
-    for arm, run in IMPLEMENTATIONS:
+    for arm, run in implementations:
         tree = work_tree(args.root / run, here)
         diff = implementation_diff(tree, "origin/main")
         if not diff.strip():
@@ -150,6 +165,7 @@ def main() -> int:
         "reference_letter": next(l for l, e in zip(letters, entries) if e["reference"]),
     }, indent=2) + "\n")
 
+    print("runs:   " + ", ".join(f"{arm}={run}" for arm, run in implementations))
     print(f"packet: {packet_path}  ({len(body):,} bytes)")
     print(f"sha256: {digest}")
     print(f"entries: {len(entries)} lettered {letters[0]}..{letters[-1]}")
