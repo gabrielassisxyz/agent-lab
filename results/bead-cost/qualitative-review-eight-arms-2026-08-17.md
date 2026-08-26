@@ -6,7 +6,7 @@ Three reviewers, not four. `codex` (GPT-5.6 Sol), GLM-5.2 through `pi`, and Clau
 
 ## The arms, spelled out
 
-Every table below names an arm by a short label. Three of those labels carry no effort, because on those lanes the effort is not part of the model id - it is a setting the runner passes, and a label that omits it hides an axis worth 2.2x in output tokens on the deepseek lanes.
+Every table below names an arm by a short label, and three of those labels say nothing about reasoning effort: `sonnet`, `gpt-5.6-terra` and `gemini-3.7-flash`. That omission hides an axis worth 2.2x in output tokens on the deepseek lanes, so the roster records it once here.
 
 | arm | model id as invoked | reasoning effort | harness | where the effort is set |
 | --- | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Every table below names an arm by a short label. Three of those labels carry no 
 
 The `-k1` / `-k2` / `-k3` suffix on the `pi` lanes rotates the account, not the model: the rate limit is per account, so two lanes running at once must sit on two different ones.
 
-`gemini-3.7-flash` is worth reading twice. Its middling position invites the explanation that it was run cheap, and it was not - the id it ran under sets medium, the same effort as `gpt-5.6-terra`.
+`gemini-3.7-flash` is worth reading twice. Its middling position invites the explanation that it was run cheap, and it was not - the label drops the suffix, and the id it ran under sets medium, the same effort as `gpt-5.6-terra`.
 
 **Read the ranking against the floor before believing any of it.** On this packet the floor is worse than it has ever been measured, and that is the first result.
 

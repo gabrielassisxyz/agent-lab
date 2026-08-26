@@ -15,6 +15,27 @@ The scorer now grades twice and reports both answers.
 
 `passed` carries the first, because completing the bead is what the cost arithmetic divides by. The second is reported per run as `pre_existing_tests_pass`, and it is a finding rather than a zero.
 
+## The arms, spelled out
+
+An arm is the pair (harness, model), and reasoning effort is part of the model rather than a knob on top of it - `deepseek pro-high` and `deepseek pro-max` are two arms, not one arm run twice. Four labels state the effort and are self-describing; `kimi-k2.7` has no such axis at all. The remaining three say nothing about it, and the table below is the only place they are written down.
+
+| arm | model id as invoked | reasoning effort | where the effort is set |
+| --- | --- | --- | --- |
+| gpt-5.6-terra | `gpt-5.6-terra` | medium | `-c model_reasoning_effort`, from `BEAD_COST_CODEX_EFFORT` |
+| kimi-k2.7 | `litellm/kimi-k2.7-k{1,2,3}` | none - the model has no effort axis | - |
+| gemini-3.7-flash | `gemini-3.7-flash-medium` | medium | in the id |
+| gemini-3.1-pro-high | `gemini-3.1-pro-high` | high | in the id |
+| sonnet | `sonnet`, answered by `claude-sonnet-5` | high | `effortLevel` in the sandbox's `settings.json` |
+| deepseek pro-high | `litellm/deepseek-v4-pro-high-k{1,2,3}` | high | in the id |
+| deepseek flash-high | `litellm/deepseek-v4-flash-high-k{1,2,3}` | high | in the id |
+| deepseek pro-max | `litellm/deepseek-v4-pro-max-k{1,2,3}` | max | in the id |
+
+The `-k1` / `-k2` / `-k3` suffix rotates the account, not the model: the limit on those lanes is a request rate per account, so two lanes running at once must sit on two different ones.
+
+Two of those three are worth stating plainly, because the cost ordering below invites the wrong guess about both. `gemini-3.7-flash` ran at medium - the label drops the suffix its id carries - so its mid-table cost is not the discount it looks like. And the cheapest arm here ran at medium too: `gpt-5.6-terra` is not first because it was asked to think least, since four of the arms above it in output were asked for high and one for max.
+
+For the codex lane the effort is read back out of the run's own trajectory by `collect.py` and reported per run as `reasoning_effort_ran`, so what appears here is the effort that ran rather than the one that was requested.
+
 ## What the arms cost
 
 Means are over the arm's **usable** runs; `±` is relative standard deviation. "API kept" counts the solved runs whose tree still satisfies the package's pre-existing tests.
