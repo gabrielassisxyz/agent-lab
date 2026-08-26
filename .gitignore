@@ -23,3 +23,13 @@ windows-bibi.pub
 
 # base files lifted out of the eval image for node scoring — reproducible, not source
 .cache/
+
+# The beads tracker's own directory. Everything in it is machine-local: the SQLite
+# database, its WAL and lock files, and the JSONL export beside them. Every br repo in
+# this fleet ignores it the same way — what travels is the declaration in llm-workflow's
+# `harness/repos`, not the database. No trailing slash, for the reason the private-boundary
+# block above spells out: a worktree materializes this path as a symlink.
+/.beads
+
+# bv (beads viewer) local config and caches, written by `br init` itself.
+.bv/

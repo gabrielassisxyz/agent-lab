@@ -1,0 +1,12 @@
+# Paths a new worktree gets as symlinks to the main tree, one per line. Everything here
+# is git-ignored, so it never leaves this machine, and `bin/worktree` refuses to link a
+# path that is not — a link it created would otherwise be committable by `git add -A`.
+#
+# This file REPLACES the tool's built-in default list rather than extending it, so the
+# two paths that were already being linked are repeated here on purpose.
+local
+.ai-jail
+
+# The beads tracker. A worktree without this link finds no `.beads/`, reports the repo as
+# uninitialised, and offers to create a second tracker beside the real one.
+.beads
