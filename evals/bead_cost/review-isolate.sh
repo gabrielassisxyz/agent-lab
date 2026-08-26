@@ -31,7 +31,7 @@ set -euo pipefail
 
 packet_dir="${1:?usage: review-isolate.sh <packet-dir> [-- <command>...]}"
 shift || true
-[ "${1:-}" = "--" ] && shift || true
+if [ "${1:-}" = "--" ]; then shift; fi
 
 packet_dir="$(cd "$packet_dir" && pwd)"
 [ -f "$packet_dir/packet.md" ] || { echo "isolate: no packet.md in $packet_dir" >&2; exit 1; }
